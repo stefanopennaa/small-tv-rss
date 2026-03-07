@@ -2,9 +2,9 @@
 // SmallTV Firmware - ESP8266 Weather Clock with RSS Feed Display
 // =====================================================================
 // Version: 2026.03.07 (Improved)
-// 
+//
 // Hardware: GeekMagic SmallTV (ESP8266 + ST7789 240x240 TFT)
-// 
+//
 // Main Features:
 // - Real-time clock with NTP sync (Italy timezone: CET/CEST with DST)
 // - Live weather data from OpenWeatherMap API (temperature, humidity, conditions)
@@ -58,12 +58,12 @@
 #include "index_html.h"
 
 // Icon assets (stored in flash memory to save RAM):
-#include "icons/wifi/icons_1bit.h"    // WiFi connection animation (32x32, 1-bit monochrome)
-#include "icons/sync/icons_1bit.h"    // NTP sync spinner animation (32x32, 1-bit monochrome)
-#include "icons/mm/mm_rgb565.h"       // Weather condition icon (80x80, RGB565 color)
-#include "icons/temp/temp_rgb565.h"   // Temperature indicator (12x32, RGB565 color)
-#include "icons/temp/humi_rgb565.h"   // Humidity indicator (22x32, RGB565 color)
-#include "icons/rss/rss_rgb565.h"     // RSS feed icon (32x32, RGB565 color)
+#include "icons/wifi/icons_1bit.h"   // WiFi connection animation (32x32, 1-bit monochrome)
+#include "icons/sync/icons_1bit.h"   // NTP sync spinner animation (32x32, 1-bit monochrome)
+#include "icons/mm/mm_rgb565.h"      // Weather condition icon (80x80, RGB565 color)
+#include "icons/temp/temp_rgb565.h"  // Temperature indicator (12x32, RGB565 color)
+#include "icons/temp/humi_rgb565.h"  // Humidity indicator (22x32, RGB565 color)
+#include "icons/rss/rss_rgb565.h"    // RSS feed icon (32x32, RGB565 color)
 
 // WiFi Credentials
 // Include wifi_secrets.h if it exists (not tracked by git)
@@ -93,22 +93,22 @@
 
 // Hardware instances
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);  // ST7789 240x240 TFT display driver
-ESP8266WebServer server(80);                                      // HTTP server on port 80
+ESP8266WebServer server(80);                                     // HTTP server on port 80
 
 // UI Text Strings Structure
 // Centralizes all user-visible text to simplify localization and reduce string literals in code
 struct UiText {
-  const char* wifi;          // WiFi connection in progress
-  const char* connected;     // WiFi successfully connected
-  const char* ntpSync;       // NTP synchronization in progress
-  const char* synced;        // NTP sync successful
-  const char* updating;      // OTA firmware update in progress
-  const char* updated;       // OTA update completed successfully
-  const char* failed;        // Operation failed
-  const char* ipPrefix;      // IP address label prefix
-  const char* wifiMissing;   // WiFi credentials not configured
-  const char* wifiOffline;   // WiFi not connected
-  const char* wifiTimeout;   // WiFi connection timeout
+  const char* wifi;         // WiFi connection in progress
+  const char* connected;    // WiFi successfully connected
+  const char* ntpSync;      // NTP synchronization in progress
+  const char* synced;       // NTP sync successful
+  const char* updating;     // OTA firmware update in progress
+  const char* updated;      // OTA update completed successfully
+  const char* failed;       // Operation failed
+  const char* ipPrefix;     // IP address label prefix
+  const char* wifiMissing;  // WiFi credentials not configured
+  const char* wifiOffline;  // WiFi not connected
+  const char* wifiTimeout;  // WiFi connection timeout
 };
 
 // UI text constants (stored in flash memory)
@@ -129,47 +129,47 @@ constexpr UiText UI = {
 // Boot State Machine
 // Tracks the current initialization phase of the device
 enum class BootState : uint8_t {
-  BOOT_WIFI,      // Attempting to connect to WiFi network
-  BOOT_NTP,       // Synchronizing time with NTP servers
-  BOOT_READY,     // Fully operational (WiFi + NTP successful)
-  BOOT_DEGRADED   // Operating with limited functionality (WiFi/NTP failed)
+  BOOT_WIFI,     // Attempting to connect to WiFi network
+  BOOT_NTP,      // Synchronizing time with NTP servers
+  BOOT_READY,    // Fully operational (WiFi + NTP successful)
+  BOOT_DEGRADED  // Operating with limited functionality (WiFi/NTP failed)
 };
 
 // WiFi Connection Result
 // Return status from WiFi connection attempts
 enum class WiFiConnectResult : uint8_t {
-  Connected,            // Successfully connected to WiFi
-  MissingCredentials,   // SSID or password not configured
-  Timeout               // Connection timeout exceeded
+  Connected,           // Successfully connected to WiFi
+  MissingCredentials,  // SSID or password not configured
+  Timeout              // Connection timeout exceeded
 };
 
 // ===== Global State Variables =====
 
 // System State
-BootState bootState = BootState::BOOT_WIFI;                        // Current boot/initialization phase
-WiFiConnectResult lastWiFiResult = WiFiConnectResult::Timeout;    // Result of last WiFi connection attempt
-bool ntpSynced = false;                                            // True when NTP time sync is successful
-bool otaInProgress = false;                                        // True during OTA firmware update
-unsigned long bootMs = 0;                                          // Timestamp when device booted
+BootState bootState = BootState::BOOT_WIFI;                     // Current boot/initialization phase
+WiFiConnectResult lastWiFiResult = WiFiConnectResult::Timeout;  // Result of last WiFi connection attempt
+bool ntpSynced = false;                                         // True when NTP time sync is successful
+bool otaInProgress = false;                                     // True during OTA firmware update
+unsigned long bootMs = 0;                                       // Timestamp when device booted
 
 // Network Retry Timers
-unsigned long lastWiFiRetry = 0;                                   // Last WiFi reconnection attempt
-unsigned long lastNtpRetry = 0;                                    // Last NTP sync retry
+unsigned long lastWiFiRetry = 0;  // Last WiFi reconnection attempt
+unsigned long lastNtpRetry = 0;   // Last NTP sync retry
 
 // Data Refresh Timers
-unsigned long lastWeatherFetch = 0;                                // Last weather data fetch attempt
-unsigned long lastNewsFetch = 0;                                   // Last RSS feed fetch attempt
-unsigned long lastWeatherUpdate = 0;                               // Last successful weather API call
-unsigned long lastNewsUpdate = 0;                                  // Last successful news feed fetch
-bool initialDataFetched = false;                                   // True after first data fetch completes
+unsigned long lastWeatherFetch = 0;   // Last weather data fetch attempt
+unsigned long lastNewsFetch = 0;      // Last RSS feed fetch attempt
+unsigned long lastWeatherUpdate = 0;  // Last successful weather API call
+unsigned long lastNewsUpdate = 0;     // Last successful news feed fetch
+bool initialDataFetched = false;      // True after first data fetch completes
 
 // Display State
-bool showNews = false;                                             // Toggle between clock and news scenes
-int currentNewsIndex = 0;                                          // Currently displayed news item index
-unsigned long lastDisplay = 0;                                     // Scene switching timer
-unsigned long lastMarqueeUpdate = 0;                               // Marquee animation timer
-int16_t marqueeX = SCREEN_W;                                       // Current X position of scrolling text
-char marqueeMessage[32] = "Ciao Come Stai?";                       // Scrolling marquee text content
+bool showNews = false;                        // Toggle between clock and news scenes
+int currentNewsIndex = 0;                     // Currently displayed news item index
+unsigned long lastDisplay = 0;                // Scene switching timer
+unsigned long lastMarqueeUpdate = 0;          // Marquee animation timer
+int16_t marqueeX = SCREEN_W;                  // Current X position of scrolling text
+char marqueeMessage[32] = "Ciao Come Stai?";  // Scrolling marquee text content
 
 // Display Brightness
 // Value range: 0-255 (automatically inverted for PWM since this panel uses inverted backlight control)
@@ -182,11 +182,11 @@ String weatherDesc = "";       // Weather condition description (e.g., "Partly c
 String lastWeatherError = "";  // Last error message from weather API
 
 // RSS News Feed Data
-String newsTitles[NEWS_MAX];   // News headlines from ANSA feed
-String newsLinks[NEWS_MAX];    // URLs for each news item
-int lastNewsHttpCode = 0;      // HTTP response code from last feed fetch
-String lastNewsError = "";     // Error message from last fetch attempt
-int lastNewsCount = 0;         // Number of items successfully parsed
+String newsTitles[NEWS_MAX];  // News headlines from ANSA feed
+String newsLinks[NEWS_MAX];   // URLs for each news item
+int lastNewsHttpCode = 0;     // HTTP response code from last feed fetch
+String lastNewsError = "";    // Error message from last fetch attempt
+int lastNewsCount = 0;        // Number of items successfully parsed
 
 // =====================================================================
 // Utility Helper Functions
@@ -200,14 +200,14 @@ int lastNewsCount = 0;         // Number of items successfully parsed
 //   interval - Minimum interval that must pass (milliseconds)
 //   now      - Current time from millis()
 // Returns: true if interval has passed, false otherwise
-inline bool hasIntervalPassed(unsigned long& lastTime, 
-                              unsigned long interval, 
+inline bool hasIntervalPassed(unsigned long& lastTime,
+                              unsigned long interval,
                               unsigned long now) {
   if (now - lastTime >= interval) {
     lastTime = now;
     return true;
   }
-  
+
   return false;
 }
 
@@ -222,14 +222,14 @@ bool validateBrightnessInput(const String& input, int& output) {
   if (input.length() == 0 || input.length() > 3) {
     return false;
   }
-  
+
   // Verify all characters are numeric
   for (size_t i = 0; i < input.length(); i++) {
     if (!isdigit(input[i])) {
       return false;
     }
   }
-  
+
   // Convert and validate range
   output = input.toInt();
   return (output >= 0 && output <= 255);
@@ -246,9 +246,9 @@ bool validateBrightnessInput(const String& input, int& output) {
 //   msg   - Text message to display
 //   color - Text color (RGB565 format)
 //   x, y  - Screen coordinates for text positioning
-void showStatus(const String& msg, 
-                uint16_t color = ST77XX_WHITE, 
-                int16_t x = STATUS_TEXT_X, 
+void showStatus(const String& msg,
+                uint16_t color = ST77XX_WHITE,
+                int16_t x = STATUS_TEXT_X,
                 int16_t y = STATUS_TEXT_Y) {
   tft.fillScreen(BG_COLOR);
   tft.setTextColor(color);
@@ -270,16 +270,16 @@ void drawRGB565_P(int16_t x, int16_t y, int16_t w, int16_t h, const uint16_t* ic
   if (w > RGB565_LINE_MAX) {
     w = RGB565_LINE_MAX;
   }
-  
+
   uint16_t line[RGB565_LINE_MAX];
-  
+
   // Render icon line by line to minimize RAM usage
   for (int16_t row = 0; row < h; row++) {
     // Copy one line from PROGMEM to RAM buffer
     for (int16_t col = 0; col < w; col++) {
       line[col] = pgm_read_word(&icon[row * w + col]);
     }
-    
+
     // Draw the buffered line to display
     tft.drawRGBBitmap(x, y + row, line, w, 1);
   }
@@ -299,28 +299,28 @@ void drawRGB565_P(int16_t x, int16_t y, int16_t w, int16_t h, const uint16_t* ic
 String extractTag(const String& src, const char* tag) {
   String openTag = String("<") + tag + ">";
   String closeTag = String("</") + tag + ">";
-  
+
   // Find opening tag
   int start = src.indexOf(openTag);
   if (start < 0) {
     return "";
   }
   start += openTag.length();
-  
+
   // Find closing tag
   int end = src.indexOf(closeTag, start);
   if (end < 0) {
     return "";
   }
-  
+
   // Extract content between tags
   String out = src.substring(start, end);
-  
+
   // Remove CDATA markers if present
   out.replace("<![CDATA[", "");
   out.replace("]]>", "");
   out.trim();
-  
+
   return out;
 }
 
@@ -337,10 +337,10 @@ String extractTag(const String& src, const char* tag) {
 String jsonEscape(const String& s) {
   String out;
   out.reserve(s.length() + JSON_ESCAPE_BUFFER_MARGIN);
-  
+
   for (size_t i = 0; i < s.length(); i++) {
     char c = s[i];
-    
+
     switch (c) {
       case '\\': out += "\\\\"; break;
       case '\"': out += "\\\""; break;
@@ -349,7 +349,7 @@ String jsonEscape(const String& s) {
       case '\n': out += "\\n"; break;
       case '\r': out += "\\r"; break;
       case '\t': out += "\\t"; break;
-      
+
       default:
         // Replace control characters with space
         if ((uint8_t)c < 0x20) {
@@ -360,7 +360,7 @@ String jsonEscape(const String& s) {
         break;
     }
   }
-  
+
   return out;
 }
 
@@ -489,26 +489,25 @@ bool ICACHE_FLASH_ATTR syncNTP() {
   }
 
   showStatus(UI.ntpSync, ST77XX_WHITE, 54, 135);
-  
+
   // Configure NTP servers and Italy timezone (CET-1CEST with DST)
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
   tzset();
-  
+
   const unsigned long MIN_SYNC_MS = NTP_MIN_SYNC_ANIM_MS;
   unsigned long syncStart = millis();
   unsigned long lastStep = millis();
   uint8_t frameIndex = 0;
-  
+
   // Initial sync icon frame
-  tft.drawBitmap(SYNC_ICON_X, SYNC_ICON_Y, SYNC_1, SYNC_1_W, SYNC_1_H, 
+  tft.drawBitmap(SYNC_ICON_X, SYNC_ICON_Y, SYNC_1, SYNC_1_W, SYNC_1_H,
                  ST77XX_WHITE, BG_COLOR);
-  
+
   // Wait for NTP sync with animated feedback
   // Condition: time must be valid (>100000 unix epoch) AND minimum animation shown
-  while ((time(nullptr) < 100000 || (millis() - syncStart) < MIN_SYNC_MS) && 
-         (millis() - syncStart) < NTP_SYNC_TIMEOUT_MS) {
-    
+  while ((time(nullptr) < 100000 || (millis() - syncStart) < MIN_SYNC_MS) && (millis() - syncStart) < NTP_SYNC_TIMEOUT_MS) {
+
     // Frame rate limiting
     if (millis() - lastStep < ANIMATION_FRAME_INTERVAL_MS) {
       delay(1);
@@ -516,40 +515,40 @@ bool ICACHE_FLASH_ATTR syncNTP() {
     }
 
     lastStep = millis();
-    
+
     // Cycle through sync animation frames
     switch (frameIndex) {
       case 0:
-        tft.drawBitmap(SYNC_ICON_X, SYNC_ICON_Y, SYNC_2, SYNC_2_W, SYNC_2_H, 
+        tft.drawBitmap(SYNC_ICON_X, SYNC_ICON_Y, SYNC_2, SYNC_2_W, SYNC_2_H,
                        ST77XX_WHITE, BG_COLOR);
         break;
       case 1:
-        tft.drawBitmap(SYNC_ICON_X, SYNC_ICON_Y, SYNC_3, SYNC_3_W, SYNC_3_H, 
+        tft.drawBitmap(SYNC_ICON_X, SYNC_ICON_Y, SYNC_3, SYNC_3_W, SYNC_3_H,
                        ST77XX_WHITE, BG_COLOR);
         break;
       case 2:
-        tft.drawBitmap(SYNC_ICON_X, SYNC_ICON_Y, SYNC_4, SYNC_4_W, SYNC_4_H, 
+        tft.drawBitmap(SYNC_ICON_X, SYNC_ICON_Y, SYNC_4, SYNC_4_W, SYNC_4_H,
                        ST77XX_WHITE, BG_COLOR);
         break;
       default:
-        tft.drawBitmap(SYNC_ICON_X, SYNC_ICON_Y, SYNC_1, SYNC_1_W, SYNC_1_H, 
+        tft.drawBitmap(SYNC_ICON_X, SYNC_ICON_Y, SYNC_1, SYNC_1_W, SYNC_1_H,
                        ST77XX_WHITE, BG_COLOR);
         break;
     }
-    
+
     frameIndex = (frameIndex + 1) & 0x03;  // Cycle 0-3
   }
 
   // Check if sync was successful (valid unix timestamp)
   ntpSynced = (time(nullptr) >= 100000);
-  
+
   // Show result status
-  showStatus(ntpSynced ? UI.synced : UI.failed, 
-             ntpSynced ? ST77XX_GREEN : ST77XX_RED, 
+  showStatus(ntpSynced ? UI.synced : UI.failed,
+             ntpSynced ? ST77XX_GREEN : ST77XX_RED,
              78, 110);
   delay(NTP_STATUS_DELAY_MS);
   tft.fillScreen(BG_COLOR);
-  
+
   return ntpSynced;
 }
 
@@ -569,7 +568,7 @@ void fetchWeather() {
     lastWeatherError = UI.wifiOffline;
     return;
   }
-  
+
   if (strlen(OWM_API_KEY) == 0) {
     lastWeatherError = "API key missing";
     return;
@@ -589,10 +588,10 @@ void fetchWeather() {
 
   http.begin(client, url);
   http.setTimeout(WEATHER_HTTP_TIMEOUT_MS);
-  
+
   // Perform HTTP GET request
   int code = http.GET();
-  
+
   if (code == HTTP_CODE_OK) {
     // Security check: validate response size before reading
     int contentLength = http.getSize();
@@ -601,7 +600,7 @@ void fetchWeather() {
       http.end();
       return;
     }
-    
+
     // Read and parse JSON response
     String payload = http.getString();
     StaticJsonDocument<1024> doc;
@@ -609,25 +608,21 @@ void fetchWeather() {
 
     if (!err) {
       // Validate JSON structure before accessing keys (prevents crashes)
-      if (doc.containsKey("main") && 
-          doc["main"].containsKey("temp") && 
-          doc["main"].containsKey("humidity") && 
-          doc.containsKey("weather") && 
-          doc["weather"].size() > 0) {
-        
+      if (doc.containsKey("main") && doc["main"].containsKey("temp") && doc["main"].containsKey("humidity") && doc.containsKey("weather") && doc["weather"].size() > 0) {
+
         // Extract weather data
         weatherTemp = doc["main"]["temp"].as<float>();
         weatherHumidity = doc["main"]["humidity"].as<int>();
         weatherDesc = doc["weather"][0]["description"].as<String>();
-        
+
         // Capitalize first letter of description
         if (weatherDesc.length() > 0) {
           weatherDesc[0] = toupper(weatherDesc[0]);
         }
-        
+
         lastWeatherUpdate = millis();
         lastWeatherError = "";
-        
+
       } else {
         lastWeatherError = "Invalid JSON structure";
       }
@@ -704,7 +699,7 @@ void fetchAnsaRSS(const char* feedUrl) {
 
   WiFiClientSecure client;
   client.setInsecure();  // Skip certificate validation for simplicity
-  
+
   int code = -1;
   String xml;
 
@@ -715,9 +710,9 @@ void fetchAnsaRSS(const char* feedUrl) {
     http.setTimeout(RSS_HTTP_TIMEOUT_MS);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     http.addHeader("User-Agent", "Mozilla/5.0");
-    
+
     code = http.GET();
-    
+
     if (code == HTTP_CODE_OK) {
       // Security check: validate response size before reading
       int contentLength = http.getSize();
@@ -726,21 +721,21 @@ void fetchAnsaRSS(const char* feedUrl) {
         http.end();
         return;
       }
-      
+
       xml = http.getString();
       http.end();
-      
+
       // Validate we actually got data
       if (xml.length() == 0) {
         lastNewsError = "Empty response";
         return;
       }
-      
+
       break;  // Success - exit retry loop
     }
-    
+
     http.end();
-    
+
     // Delay before next attempt (except on last attempt)
     if (attempt < RSS_HTTP_ATTEMPTS - 1) {
       delay(RSS_RETRY_DELAY_MS);
@@ -754,9 +749,9 @@ void fetchAnsaRSS(const char* feedUrl) {
 
   if (code == HTTP_CODE_OK) {
     // Parse RSS XML and extract news items
-    lastNewsCount = parseRssItems(xml, newsTitles, newsLinks, 
-                                   NEWS_MAX, lastNewsError);
-    
+    lastNewsCount = parseRssItems(xml, newsTitles, newsLinks,
+                                  NEWS_MAX, lastNewsError);
+
     if (lastNewsCount > 0) {
       lastNewsUpdate = millis();
     }
@@ -781,54 +776,54 @@ void drawWeather() {
   // Clear weather panel area
   tft.fillRect(0, 125, 240, 115, BG_COLOR);
   tft.drawFastHLine(20, 125, 200, 0x4208);  // Separator line
-  
+
   // === TEMPERATURE DISPLAY ===
   tft.setTextSize(2);
   tft.setTextColor(TEMP_COLOR);
   tft.setCursor(45, 150);
-  
+
   // Temperature progress bar background
   tft.drawRoundRect(45, 170, 80, 9, 50, ST77XX_WHITE);
   tft.fillCircle(48, 174, 2, TEMP_COLOR);  // Indicator dot
-  
+
   // Calculate and draw temperature fill (0-40°C scale)
   float t = constrain(weatherTemp, 0.0f, 40.0f);
   int tempWidth = (int)((78.0f * t) / 40.0f);
   tft.fillRect(48, 171, tempWidth, 7, TEMP_COLOR);
-  
+
   // Temperature icon
   drawRGB565_P(TEMP_ICON_X, TEMP_ICON_Y, TEMP_ICON_W, TEMP_ICON_H, TEMP_ICON_RGB565);
-  
+
   // Temperature text
   char tempText[12];
   snprintf(tempText, sizeof(tempText), "%.1fC", weatherTemp);
   tft.print(tempText);
-  
+
   // === HUMIDITY DISPLAY ===
   tft.setTextSize(2);
   tft.setTextColor(HUM_COLOR);
   tft.setCursor(45, 195);
-  
+
   // Humidity progress bar background
   tft.drawRoundRect(45, 215, 80, 9, 50, ST77XX_WHITE);
   tft.fillCircle(48, 219, 2, HUM_COLOR);  // Indicator dot
-  
+
   // Calculate and draw humidity fill (0-100% scale)
   int h = constrain(weatherHumidity, 0, 100);
   int humiWidth = (int)((78.0f * h) / 100.0f);
   tft.fillRect(48, 216, humiWidth, 7, HUM_COLOR);
-  
+
   // Humidity icon
   drawRGB565_P(HUMI_ICON_X, HUMI_ICON_Y, HUMI_ICON_W, HUMI_ICON_H, HUMI_ICON_RGB565);
-  
+
   // Humidity text
   char humidityText[8];
   snprintf(humidityText, sizeof(humidityText), "%d%%", weatherHumidity);
   tft.print(humidityText);
-  
+
   // Weather condition icon (right side)
   drawRGB565_P(MM_ICON_X, MM_ICON_Y, MM_RGB565_W, MM_RGB565_H, MM_RGB565);
-  
+
   // Reset text color for future draws
   tft.setTextColor(ST77XX_WHITE);
 }
@@ -1119,7 +1114,7 @@ void tickSceneScheduler(unsigned long now) {
 
 // setup()
 // Main initialization function (called once at startup)
-// 
+//
 // Initialization sequence:
 //   1. Configure TFT display and backlight
 //   2. Attempt WiFi connection with visual feedback
@@ -1241,13 +1236,13 @@ void setup() {
         server.send(400, "text/plain", "Missing value parameter");
         return;
       }
-      
+
       int brightness;
       if (!validateBrightnessInput(server.arg("value"), brightness)) {
         server.send(400, "text/plain", "Invalid value (0-255)");
         return;
       }
-      
+
       setBrightness(brightness);
       server.send(200, "text/plain", "ok");
     });
@@ -1264,7 +1259,7 @@ void setup() {
 
 // loop()
 // Main runtime loop (called continuously after setup completes)
-// 
+//
 // Execution flow:
 //   1. Handle incoming HTTP requests (web UI and API)
 //   2. Process OTA update requests

@@ -4,7 +4,7 @@
 // =====================================================================
 // This file contains the complete HTML/CSS/JavaScript for the device's
 // web interface. The content is stored in PROGMEM to conserve RAM.
-// 
+//
 // Features:
 // - Responsive Bootstrap 5 design with dark/light mode support
 // - Real-time weather and device status display
