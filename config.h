@@ -110,14 +110,14 @@ constexpr unsigned long ANIMATION_FRAME_INTERVAL_MS = 250;  // Frame duration fo
 // WiFi Connection Timing
 constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 12000;  // Maximum time to wait for WiFi connection (12 sec)
 constexpr unsigned long WIFI_RETRY_INTERVAL_MS = 10000;   // Retry interval if WiFi disconnects (10 sec)
-constexpr unsigned long WIFI_STATUS_DELAY_MS = 250;       // Status message display duration
+constexpr unsigned long WIFI_STATUS_DELAY_MS = 500;       // Status message display duration
 constexpr unsigned long WIFI_CONNECTED_DELAY_MS = 1000;   // Success message display duration
 
 // NTP Synchronization Timing
 constexpr unsigned long NTP_SYNC_TIMEOUT_MS = 7000;     // Maximum time to wait for NTP sync (7 sec)
 constexpr unsigned long NTP_MIN_SYNC_ANIM_MS = 1250;    // Minimum animation duration for user feedback
 constexpr unsigned long NTP_RETRY_INTERVAL_MS = 60000;  // Retry interval if sync fails (60 sec)
-constexpr unsigned long NTP_STATUS_DELAY_MS = 250;      // Status message display duration
+constexpr unsigned long NTP_STATUS_DELAY_MS = 500;      // Status message display duration
 
 // Data Fetching Timing
 // Delays first HTTP request so UI appears responsive immediately after boot

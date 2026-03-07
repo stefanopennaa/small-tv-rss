@@ -168,6 +168,7 @@ bool showNews = false;                // Toggle between clock and news scenes
 int currentNewsIndex = 0;             // Currently displayed news item index
 unsigned long lastDisplay = 0;        // Scene switching timer
 unsigned long lastClockRefresh = 0;   // Clock refresh timer (while in clock scene)
+int lastMinute = -1;                  // Last displayed minute (avoids redundant clock redraws)
 unsigned long lastMarqueeUpdate = 0;  // Marquee animation timer
 int16_t marqueeX = SCREEN_W;          // Current X position of scrolling text
 char marqueeMessage[32] = "Torino";   // Scrolling marquee text content
@@ -943,12 +944,12 @@ void drawClock() {
   }
 
   tft.setFont(&FreeSansBold18pt7b);
-  tft.fillRect(0, 0, 240, 124, BG_COLOR);
   int16_t x1, y1;
   uint16_t w, h;
   tft.getTextBounds(timeStr, 0, 0, &x1, &y1, &w, &h);
   int cx = ((240 - w) / 2) - 5;
   int cy = 40 + h;
+  tft.fillRect(25, 35, 190, 65, BG_COLOR);
   tft.setTextColor(ST77XX_WHITE);
   tft.setCursor(cx, cy);
   tft.print(timeStr);
@@ -1110,7 +1111,6 @@ void tickClockRefresh(unsigned long now) {
 
   time_t t = time(nullptr);
   struct tm* ti = localtime(&t);
-  static int lastMinute = -1;
   int currentMinute = ntpSynced && ti ? ti->tm_hour * 60 + ti->tm_min : -1;
   if (currentMinute == lastMinute) return;
   lastMinute = currentMinute;
@@ -1288,14 +1288,29 @@ void setup() {
       server.send(200, "application/json", "{\"ok\":true}");
     });
 
+  // Fetch weather and news immediately before first render, then skip deferred initial fetch.
+  fetchWeather();
+  fetchAnsaRSS(ANSA_RSS_URL);
+  initialDataFetched = true;
+
+  // ElegantOTA
   ElegantOTA.begin(&server);
   ElegantOTA.onStart(onOTAStart);
   ElegantOTA.onProgress(onOTAProgress);
   ElegantOTA.onEnd(onOTAEnd);
   server.begin();
 
+  // Show Clock and Weather Info
   drawClock();
   drawWeather();
+
+  // Prime clock refresh state so tickClockRefresh doesn't redraw immediately
+  {
+    time_t t = time(nullptr);
+    struct tm* ti = localtime(&t);
+    lastMinute = (ntpSynced && ti) ? ti->tm_hour * 60 + ti->tm_min : -1;
+    lastClockRefresh = millis();
+  }
 }
 
 // loop()
