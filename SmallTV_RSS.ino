@@ -21,7 +21,7 @@
 // Architecture:
 // 1) setup()   - Hardware initialization, WiFi connection, NTP sync, web server startup
 // 2) loop()    - Non-blocking event handlers (WiFi/NTP retry, data refresh, UI updates)
-// 3) Rendering - Home screen with clock, weather panel, and scrolling text
+// 3) Rendering - Alternates between home screen and paged news scene
 //
 // Code Quality Improvements (v2026.03.07):
 // - Replaced magic numbers with named constants for maintainability
@@ -164,12 +164,12 @@ unsigned long lastNewsUpdate = 0;     // Last successful news feed fetch
 bool initialDataFetched = false;      // True after first data fetch completes
 
 // Display State
-bool showNews = false;                        // Toggle between clock and news scenes
-int currentNewsIndex = 0;                     // Currently displayed news item index
-unsigned long lastDisplay = 0;                // Scene switching timer
-unsigned long lastMarqueeUpdate = 0;          // Marquee animation timer
-int16_t marqueeX = SCREEN_W;                  // Current X position of scrolling text
-char marqueeMessage[32] = "Ciao Come Stai?";  // Scrolling marquee text content
+bool showNews = false;                // Toggle between clock and news scenes
+int currentNewsIndex = 0;             // Currently displayed news item index
+unsigned long lastDisplay = 0;        // Scene switching timer
+unsigned long lastMarqueeUpdate = 0;  // Marquee animation timer
+int16_t marqueeX = SCREEN_W;          // Current X position of scrolling text
+char marqueeMessage[32] = "News";     // Scrolling marquee text content
 
 // Display Brightness
 // Value range: 0-255 (automatically inverted for PWM since this panel uses inverted backlight control)
@@ -775,7 +775,7 @@ void fetchAnsaRSS(const char* feedUrl) {
 void drawWeather() {
   // Clear weather panel area
   tft.fillRect(0, 125, 240, 115, BG_COLOR);
-  tft.drawFastHLine(20, 125, 200, 0x4208);  // Separator line
+  tft.drawFastHLine(20, 135, 200, 0x4208);  // Separator line
 
   // === TEMPERATURE DISPLAY ===
   tft.setTextSize(2);
@@ -1064,7 +1064,7 @@ void tickWeather(unsigned long now) {
 // tickNews()
 // Periodically fetches updated RSS news feed from ANSA
 // Runs at intervals defined by NEWS_INTERVAL_MS (typically 10 minutes)
-// Updates news data in background (news scene display is currently disabled)
+// Updates news data used by the news scene scheduler
 void tickNews(unsigned long now) {
   if (hasIntervalPassed(lastNewsFetch, NEWS_INTERVAL_MS, now)) {
     fetchAnsaRSS(ANSA_RSS_URL);
@@ -1084,6 +1084,8 @@ void tickMarquee(unsigned long now) {
   tft.fillRect(0, MARQUEE_Y, SCREEN_W, MARQUEE_H, BG_COLOR);
   tft.setTextSize(2);
   tft.setTextColor(ST77XX_WHITE);
+  // Prevent line-wrap artifacts when marqueeX becomes negative.
+  tft.setTextWrap(false);
   tft.setCursor(marqueeX, MARQUEE_Y);
   tft.print(marqueeMessage);
 
@@ -1098,14 +1100,32 @@ void tickMarquee(unsigned long now) {
 
 // tickSceneScheduler()
 // Manages switching between clock/home scene and news display scenes
-// Currently disabled: keeps device in home-only mode for testing
-// Future: Will alternate between clock display and news headlines
 // Parameters:
 //   now - Current timestamp from millis()
 void tickSceneScheduler(unsigned long now) {
-  // News scene is temporarily disabled: keep only home screen visible.
-  (void)now;
-  showNews = false;
+  unsigned long interval = showNews ? DISPLAY_NEWS_MS : DISPLAY_CLOCK_MS;
+  if (now - lastDisplay < interval) {
+    return;
+  }
+
+  lastDisplay = now;
+  if (!showNews) {
+    showNews = true;
+    currentNewsIndex = 0;
+    drawNews(currentNewsIndex);
+    return;
+  }
+
+  currentNewsIndex++;
+  if (currentNewsIndex >= NEWS_MAX) {
+    showNews = false;
+    tft.fillScreen(BG_COLOR);
+    marqueeX = SCREEN_W;
+    drawClock();
+    drawWeather();
+  } else {
+    drawNews(currentNewsIndex);
+  }
 }
 
 // =====================================================================
@@ -1131,6 +1151,8 @@ void tickSceneScheduler(unsigned long now) {
 //       even if network services are unavailable
 void setup() {
   bootMs = millis();
+  analogWriteFreq(5000);  // Increase PWM frequency to reduce backlight flicker during WiFi ops
+  analogWriteRange(255);
   setBrightness(50);
   tft.init(SCREEN_W, SCREEN_H, SPI_MODE3);
   tft.setRotation(2);
@@ -1244,7 +1266,7 @@ void setup() {
       }
 
       setBrightness(brightness);
-      server.send(200, "text/plain", "ok");
+      server.send(200, "application/json", "{\"ok\":true}");
     });
 
   ElegantOTA.begin(&server);

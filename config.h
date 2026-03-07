@@ -40,7 +40,7 @@ constexpr unsigned long NEWS_INTERVAL_MS = 600000UL;
 
 // Scene Display Durations
 // Controls how long each screen type is visible before switching
-constexpr unsigned long DISPLAY_CLOCK_MS = 10000UL;  // Clock scene: 10 seconds
+constexpr unsigned long DISPLAY_CLOCK_MS = 25000UL;  // Clock scene: 25 seconds
 constexpr unsigned long DISPLAY_NEWS_MS = 5000UL;    // News scene: 5 seconds per item
 
 // =====================================================================
@@ -93,7 +93,7 @@ constexpr int16_t STATUS_TEXT_Y = 10;
 // =====================================================================
 
 constexpr unsigned long MARQUEE_INTERVAL_MS = 500;  // Animation frame interval (milliseconds)
-constexpr int16_t MARQUEE_Y = 100;                  // Vertical position on screen
+constexpr int16_t MARQUEE_Y = 115;                  // Vertical position on screen
 constexpr int16_t MARQUEE_H = 16;                   // Text height (pixels)
 constexpr int16_t MARQUEE_STEP_PX = 5;              // Horizontal scroll distance per frame
 
