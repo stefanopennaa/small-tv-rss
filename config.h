@@ -103,6 +103,9 @@ constexpr int16_t MARQUEE_STEP_PX = 5;                             // Horizontal
 // All timeout values are in milliseconds
 // Timeouts prevent indefinite blocking during network operations
 
+// Animation Frame Timing
+constexpr unsigned long ANIMATION_FRAME_INTERVAL_MS = 250;         // Frame duration for WiFi/NTP animations
+
 // WiFi Connection Timing
 constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 12000;           // Maximum time to wait for WiFi connection (12 sec)
 constexpr unsigned long WIFI_RETRY_INTERVAL_MS = 10000;            // Retry interval if WiFi disconnects (10 sec)
@@ -131,6 +134,11 @@ constexpr uint16_t RSS_HTTP_TIMEOUT_MS = 3500;                     // RSS feed f
 // Request Retry Logic
 // RSS feeds can fail due to TLS handshake issues or redirects - retry once automatically
 constexpr uint8_t RSS_HTTP_ATTEMPTS = 2;                           // Number of attempts for RSS fetch
+constexpr uint8_t RSS_RETRY_DELAY_MS = 30;                         // Delay between retry attempts
+
+// Response Size Limits (security/stability)
+constexpr size_t RSS_MAX_RESPONSE_SIZE = 32768;                    // Maximum RSS feed size (32 KB)
+constexpr size_t WEATHER_MAX_RESPONSE_SIZE = 4096;                 // Maximum weather API response (4 KB)
 
 // =====================================================================
 // Graphics Rendering Configuration
@@ -140,3 +148,7 @@ constexpr uint8_t RSS_HTTP_ATTEMPTS = 2;                           // Number of 
 // Limits RAM usage during icon drawing (1 line buffer)
 // Icons wider than this will be clipped to prevent buffer overflow
 constexpr int16_t RGB565_LINE_MAX = 80;
+
+// String Formatting Safety
+constexpr uint8_t JSON_ESCAPE_BUFFER_MARGIN = 16;                  // Extra buffer space for JSON escape sequences
+constexpr uint8_t TIME_STRING_BUFFER_SIZE = 10;                    // Safe buffer size for time strings (HH:MM + null)
