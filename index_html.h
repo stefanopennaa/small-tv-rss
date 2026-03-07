@@ -252,7 +252,12 @@ const char INDEX_HTML[] PROGMEM = R"(
                             <span>Azioni</span>
                         </h5>
                         <div class="d-grid gap-2">
-                            <a href="/update" class="btn btn-custom btn-lg rounded-4">
+                            <a 
+                                href="/update" 
+                                class="btn btn-custom btn-lg rounded-4"
+                                role="button"
+                                aria-label="Vai alla pagina di aggiornamento firmware"
+                            >
                                 🔄 Aggiorna Firmware
                             </a>
                         </div>
@@ -264,24 +269,49 @@ const char INDEX_HTML[] PROGMEM = R"(
                             <span>💡</span>
                             <span>Luminosità</span>
                         </h5>
+                        <label for="brightness" class="form-label visually-hidden">
+                            Controllo luminosità schermo
+                        </label>
                         <div class="d-flex align-items-center gap-3">
-                            <span style="font-size: 1.25rem;">🌑</span>
-                            <input type="range" class="form-range flex-grow-1" min="0" max="255" id="brightness">
-                            <span style="font-size: 1.25rem;">🌕</span>
+                            <span style="font-size: 1.25rem;" aria-hidden="true">🌑</span>
+                            <input 
+                                type="range" 
+                                class="form-range flex-grow-1" 
+                                min="0" 
+                                max="255" 
+                                id="brightness"
+                                aria-label="Luminosità da 0 a 255"
+                                aria-valuemin="0"
+                                aria-valuemax="255"
+                                aria-valuenow="0"
+                                aria-describedby="brightness-help"
+                            >
+                            <span style="font-size: 1.25rem;" aria-hidden="true">🌕</span>
                         </div>
                         <div class="text-center mt-3">
-                            <span class="status-badge" id="brightness-label">--</span>
+                            <span class="status-badge" id="brightness-label" role="status" aria-live="polite" aria-atomic="true">--</span>
+                            <small id="brightness-help" class="d-block text-muted mt-2 visually-hidden">
+                                Usa le frecce per regolare la luminosità
+                            </small>
                         </div>
                     </div>
 
                     <!-- News -->
                     <div class="card p-4 rounded-4">
                         <h5 class="mb-3 d-flex align-items-center gap-2">
-                            <span>📰</span>
+                            <span aria-hidden="true">📰</span>
                             <span>Notizie</span>
                         </h5>
-                        <div id="news" class="news-list">
-                            <div class="loading">Caricamento notizie...</div>
+                        <div 
+                            id="news" 
+                            class="news-list" 
+                            role="region" 
+                            aria-label="Feed notizie ANSA"
+                            aria-live="polite"
+                        >
+                            <div class="loading" role="status">
+                                <span>Caricamento notizie...</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -289,137 +319,303 @@ const char INDEX_HTML[] PROGMEM = R"(
         </div>
 
         <!-- Footer -->
-        <div class="text-center mt-4 text-muted small">
-            <p class="mb-0">Ultimo aggiornamento: <span id="last-update">--</span></p>
-        </div>
+        <footer class="text-center mt-4">
+            <p class="text-muted small mb-0">
+                Ultimo aggiornamento: 
+                <time id="last-update" datetime="">--</time>
+            </p>
+        </footer>
     </div>
 
     <script>
         // =====================================================
+        // Configuration Constants
+        // =====================================================
+        const CONFIG = {
+            FETCH_TIMEOUT_MS: 5000,
+            FETCH_MAX_RETRIES: 3,
+            AUTO_REFRESH_INTERVAL_MS: 60000,
+            BRIGHTNESS_DEBOUNCE_MS: 300,
+            FEEDBACK_DURATION_MS: 2000
+        };
+
+        // =====================================================
+        // Utility Functions
+        // =====================================================
+        
+        /**
+         * Fetch with automatic timeout and retry logic
+         * @param {string} url - URL to fetch
+         * @param {number} maxRetries - Maximum retry attempts
+         * @param {number} timeout - Request timeout in milliseconds
+         * @returns {Promise<any>} Parsed JSON response
+         */
+        const fetchWithRetry = async (url, maxRetries = CONFIG.FETCH_MAX_RETRIES, timeout = CONFIG.FETCH_TIMEOUT_MS) => {
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), timeout);
+                    
+                    const response = await fetch(url, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    
+                    return await response.json();
+                    
+                } catch (err) {
+                    // On last attempt, throw error
+                    if (attempt === maxRetries - 1) {
+                        throw err;
+                    }
+                    
+                    // Exponential backoff: wait longer between retries
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+                }
+            }
+        };
+
+        /**
+         * Debounce function to limit execution rate
+         * @param {Function} func - Function to debounce
+         * @param {number} delay - Delay in milliseconds
+         * @returns {Function} Debounced function
+         */
+        const debounce = (func, delay) => {
+            let timeoutId;
+            return (...args) => {
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => func(...args), delay);
+            };
+        };
+
+        /**
+         * Show visual feedback on element
+         * @param {HTMLElement} element - Target element
+         * @param {string} type - 'success' or 'error'
+         * @param {number} duration - Duration in milliseconds
+         */
+        const showFeedback = (element, type = 'success', duration = CONFIG.FEEDBACK_DURATION_MS) => {
+            const colors = {
+                success: { bg: 'rgba(40, 167, 69, 0.2)', color: '#28a745' },
+                error: { bg: 'rgba(220, 53, 69, 0.2)', color: '#dc3545' }
+            };
+            
+            const color = colors[type] || colors.success;
+            element.style.background = color.bg;
+            element.style.color = color.color;
+            
+            setTimeout(() => {
+                element.style.background = '';
+                element.style.color = '';
+            }, duration);
+        };
+
+        /**
+         * Safely validate and sanitize URL
+         * @param {string} urlString - URL to validate
+         * @returns {string|null} Valid URL or null
+         */
+        const sanitizeUrl = (urlString) => {
+            try {
+                const url = new URL(urlString);
+                // Only allow http and https protocols
+                if (['http:', 'https:'].includes(url.protocol)) {
+                    return url.href;
+                }
+            } catch (e) {
+                console.warn('Invalid URL:', urlString);
+            }
+            return null;
+        };
+
+        // =====================================================
         // UI Element References
         // =====================================================
-        const slider = document.getElementById('brightness');
-        const label = document.getElementById('brightness-label');
-        const statusBadge = document.getElementById('status');
-        const lastUpdate = document.getElementById('last-update');
+        const UI = {
+            slider: document.getElementById('brightness'),
+            label: document.getElementById('brightness-label'),
+            statusBadge: document.getElementById('status'),
+            lastUpdate: document.getElementById('last-update'),
+            temp: document.getElementById('temp'),
+            hum: document.getElementById('hum'),
+            desc: document.getElementById('desc'),
+            ip: document.getElementById('ip'),
+            newsBox: document.getElementById('news')
+        };
 
-        // Updates the "last update" timestamp in the footer
-        function updateTimestamp() {
+        /**
+         * Updates the "last update" timestamp in the footer
+         */
+        const updateTimestamp = () => {
             const now = new Date();
-            lastUpdate.textContent = now.toLocaleTimeString('it-IT');
-        }
+            const timeString = now.toLocaleTimeString('it-IT');
+            UI.lastUpdate.textContent = timeString;
+            UI.lastUpdate.setAttribute('datetime', now.toISOString());
+        };
+
+        /**
+         * Update status badge
+         * @param {boolean} online - Device online status
+         */
+        const setStatusBadge = (online) => {
+            if (online) {
+                UI.statusBadge.textContent = '● Online';
+                UI.statusBadge.style.background = 'rgba(40, 167, 69, 0.2)';
+                UI.statusBadge.style.color = '#28a745';
+            } else {
+                UI.statusBadge.textContent = '● Offline';
+                UI.statusBadge.style.background = 'rgba(220, 53, 69, 0.2)';
+                UI.statusBadge.style.color = '#dc3545';
+            }
+        };
 
         // =====================================================
-        // Initial Data Load - Device Status and Weather
+        // Data Loading Functions
         // =====================================================
-        fetch('/api')
-            .then(r => {
-                if (!r.ok) throw new Error('Network response was not ok');
-                return r.json();
-            })
-            .then(d => {
-                // Update weather display
-                document.getElementById('temp').textContent = d.temp + '°C';
-                document.getElementById('hum').textContent = d.humidity + '%';
-                document.getElementById('desc').textContent = d.description;
-                document.getElementById('ip').textContent = d.ip;
+        
+        /**
+         * Load device status and weather data
+         */
+        const loadDeviceData = async () => {
+            try {
+                const data = await fetchWithRetry('/api');
+                
+                // Update weather display (safely escape data)
+                UI.temp.textContent = `${data.temp}°C`;
+                UI.hum.textContent = `${data.humidity}%`;
+                UI.desc.textContent = data.description || '--';
+                UI.ip.textContent = data.ip || '--';
 
                 // Synchronize brightness slider with device's current setting
-                slider.value = d.brightness;
-                label.textContent = Math.round(d.brightness / 255 * 100) + '%';
+                UI.slider.value = data.brightness || 0;
+                const percentage = Math.round((data.brightness / 255) * 100);
+                UI.label.textContent = `${percentage}%`;
+                
+                // Update ARIA attributes
+                UI.slider.setAttribute('aria-valuenow', data.brightness || 0);
+                UI.slider.setAttribute('aria-valuetext', `${percentage} percento`);
 
                 // Update connection status badge
-                statusBadge.textContent = '● Online';
-                statusBadge.style.background = 'rgba(40, 167, 69, 0.2)';
-                statusBadge.style.color = '#28a745';
-
+                setStatusBadge(true);
                 updateTimestamp();
-            })
-            .catch(err => {
-                console.error('Error fetching data:', err);
-                statusBadge.textContent = '● Offline';
-                statusBadge.style.background = 'rgba(220, 53, 69, 0.2)';
-                statusBadge.style.color = '#dc3545';
-            });
+                
+            } catch (err) {
+                console.error('Error fetching device data:', err);
+                setStatusBadge(false);
+            }
+        };
+
+        /**
+         * Load news feed with safe DOM manipulation
+         */
+        const loadNewsData = async () => {
+            try {
+                const data = await fetchWithRetry('/news');
+                
+                // Clear loading message
+                UI.newsBox.innerHTML = '';
+                
+                if (!data.items || data.items.length === 0) {
+                    const p = document.createElement('p');
+                    p.className = 'text-muted mb-0';
+                    p.textContent = 'Nessuna notizia disponibile';
+                    UI.newsBox.appendChild(p);
+                    return;
+                }
+                
+                // Build news list using DocumentFragment for better performance
+                const fragment = document.createDocumentFragment();
+                const list = document.createElement('ul');
+                list.className = 'ps-3 mb-0';
+                
+                data.items.forEach(item => {
+                    // Validate URL before creating link
+                    const sanitizedUrl = sanitizeUrl(item.link);
+                    if (!sanitizedUrl && !item.title) return; // Skip invalid items
+                    
+                    const li = document.createElement('li');
+                    li.className = 'mb-2';
+                    
+                    if (sanitizedUrl) {
+                        const a = document.createElement('a');
+                        a.href = sanitizedUrl;
+                        a.textContent = item.title || '(senza titolo)';
+                        a.setAttribute('target', '_blank');
+                        a.setAttribute('rel', 'noopener noreferrer');
+                        li.appendChild(a);
+                    } else {
+                        // If no valid URL, just show text
+                        li.textContent = item.title || '(senza titolo)';
+                    }
+                    
+                    list.appendChild(li);
+                });
+                
+                fragment.appendChild(list);
+                UI.newsBox.appendChild(fragment);
+                
+            } catch (err) {
+                console.error('Error fetching news:', err);
+                const p = document.createElement('p');
+                p.className = 'text-danger mb-0';
+                p.textContent = 'Errore nel caricamento delle notizie';
+                UI.newsBox.innerHTML = '';
+                UI.newsBox.appendChild(p);
+            }
+        };
 
         // =====================================================
         // Brightness Control
         // =====================================================
         
         // Update label in real-time while user drags slider
-        slider.addEventListener('input', () => {
-            label.textContent = Math.round(slider.value / 255 * 100) + '%';
+        UI.slider.addEventListener('input', () => {
+            const percentage = Math.round((UI.slider.value / 255) * 100);
+            UI.label.textContent = `${percentage}%`;
+            UI.label.classList.add('opacity-75'); // Visual feedback: pending
+            
+            // Update ARIA attributes for accessibility
+            UI.slider.setAttribute('aria-valuenow', UI.slider.value);
+            UI.slider.setAttribute('aria-valuetext', `${percentage} percento`);
         });
 
-        // =====================================================
-        // News Feed Loader
-        // =====================================================
-        fetch('/news')
-            .then(r => {
-                if (!r.ok) throw new Error('Network response was not ok');
-                return r.json();
-            })
-            .then(d => {
-                const box = document.getElementById('news');
-                if (!d.items || d.items.length === 0) {
-                    box.innerHTML = '<p class="text-muted mb-0">Nessuna notizia disponibile</p>';
-                    return;
-                }
-                const list = document.createElement('ul');
-                list.className = 'ps-3 mb-0';
-                d.items.forEach(item => {
-                    const li = document.createElement('li');
-                    li.className = 'mb-2';
-                    const a = document.createElement('a');
-                    a.href = item.link;
-                    a.textContent = item.title || '(senza titolo)';
-                    a.target = '_blank';
-                    a.rel = 'noopener noreferrer';
-                    li.appendChild(a);
-                    list.appendChild(li);
-                });
-                box.innerHTML = '';
-                box.appendChild(list);
-            })
-            .catch(err => {
-                console.error('Error fetching news:', err);
-                document.getElementById('news').innerHTML = '<p class="text-danger mb-0">Errore nel caricamento delle notizie</p>';
-            });
-
-        // Send brightness value to device when slider is released
-        slider.addEventListener('change', () => {
-            fetch('/brightness?value=' + slider.value)
-                .then(() => {
-                    // Visual feedback: flash green on success
-                    label.style.background = 'rgba(40, 167, 69, 0.2)';
-                    label.style.color = '#28a745';
-                    setTimeout(() => {
-                        label.style.background = '';
-                        label.style.color = '';
-                    }, 1000);
-                })
-                .catch(err => {
-                    console.error('Error setting brightness:', err);
-                    // Visual feedback: flash red on error
-                    label.style.background = 'rgba(220, 53, 69, 0.2)';
-                    label.style.color = '#dc3545';
-                });
-        });
+        // Send brightness value to device (debounced to reduce requests)
+        UI.slider.addEventListener('change', debounce(async () => {
+            const value = parseInt(UI.slider.value, 10);
+            
+            // Validate range
+            if (value < 0 || value > 255) {
+                showFeedback(UI.label, 'error');
+                return;
+            }
+            
+            try {
+                await fetchWithRetry(`/brightness?value=${value}`);
+                UI.label.classList.remove('opacity-75');
+                showFeedback(UI.label, 'success', 1000);
+            } catch (err) {
+                console.error('Error setting brightness:', err);
+                showFeedback(UI.label, 'error');
+            }
+        }, CONFIG.BRIGHTNESS_DEBOUNCE_MS));
 
         // =====================================================
-        // Auto-Refresh Timer (60 seconds)
+        // Application Initialization
         // =====================================================
-        setInterval(() => {
-            fetch('/api')
-                .then(r => r.json())
-                .then(d => {
-                    document.getElementById('temp').textContent = d.temp + '°C';
-                    document.getElementById('hum').textContent = d.humidity + '%';
-                    document.getElementById('desc').textContent = d.description;
-                    updateTimestamp();
-                })
-                .catch(err => console.error('Auto-refresh failed:', err));
-        }, 60000);
+        
+        // Load initial data
+        (async () => {
+            await Promise.all([
+                loadDeviceData(),
+                loadNewsData()
+            ]);
+        })();
+
+        // Auto-refresh device data every 60 seconds
+        setInterval(loadDeviceData, CONFIG.AUTO_REFRESH_INTERVAL_MS);
     </script>
 </body>
 
