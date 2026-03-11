@@ -9,6 +9,8 @@
 
 A feature-rich firmware for the **GeekMagic SmallTV** (ESP8266 + ST7789 240x240 TFT display) that transforms it into a smart weather station and RSS news reader with a beautiful web interface.
 
+> This is an amateur project. Parts of the code and documentation were developed with AI assistance. Use it at your own risk: I do not assume responsibility for bugs, malfunctions, data loss, device misconfiguration, or bricking.
+
 ---
 
 ## ✨ Features
