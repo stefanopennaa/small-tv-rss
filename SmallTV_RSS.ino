@@ -625,11 +625,12 @@ void fetchWeather() {
     return;
   }
 
-  WiFiClient client;
+  WiFiClientSecure client;
+  client.setInsecure();
   HTTPClient http;
 
   // Build OpenWeatherMap API URL
-  String url = "http://api.openweathermap.org/data/2.5/weather?lat=";
+  String url = "https://api.openweathermap.org/data/2.5/weather?lat=";
   url += OWM_LAT;
   url += "&lon=";
   url += OWM_LON;
@@ -702,6 +703,11 @@ int parseRssItems(const String& xml, String* outTitles, String* outLinks, int ma
   int pos = 0;
   int found = 0;
   parseError = "";
+
+  for (int i = 0; i < maxItems; i++) {
+    outTitles[i] = "";
+    outLinks[i] = "";
+  }
 
   while (found < maxItems) {
     int itemStart = xml.indexOf("<item>", pos);
@@ -900,11 +906,11 @@ void drawNews(int index) {
   tft.setTextSize(1);
   tft.setFont(&Oswald_Regular10pt7b);
 
-  if (index < 0 || index >= NEWS_MAX || newsTitles[index].length() == 0) {
+  if (index < 0 || index >= lastNewsCount || newsTitles[index].length() == 0) {
     drawTextTopLeft(NEWS_TEXT_X, NEWS_TEXT_Y, "No news available");
   } else {
     // Current item index (1-based)
-    drawTextTopLeft(185, 10, String(index + 1) + "/" + String(NEWS_MAX));
+    drawTextTopLeft(185, 10, String(index + 1) + "/" + String(lastNewsCount));
 
     // Normalize text before wrapping (single spaces, no newlines).
     String text = newsTitles[index];
@@ -1166,6 +1172,12 @@ void tickClockRefresh(unsigned long now) {
 // Parameters:
 //   now - Current timestamp from millis()
 void tickSceneScheduler(unsigned long now) {
+  if (lastNewsCount <= 0) {
+    showNews = false;
+    currentNewsIndex = 0;
+    return;
+  }
+
   unsigned long interval = showNews ? DISPLAY_NEWS_MS : DISPLAY_CLOCK_MS;
   if (now - lastDisplay < interval) {
     return;
@@ -1180,7 +1192,7 @@ void tickSceneScheduler(unsigned long now) {
   }
 
   currentNewsIndex++;
-  if (currentNewsIndex >= NEWS_MAX) {
+  if (currentNewsIndex >= lastNewsCount) {
     showNews = false;
     tft.fillScreen(BG_COLOR);
     drawClock();
@@ -1289,7 +1301,7 @@ void setup() {
       String json = "{";
       json += "\"source\":\"ANSA\",";
       json += "\"items\":[";
-      for (int i = 0; i < NEWS_MAX; i++) {
+      for (int i = 0; i < lastNewsCount; i++) {
         if (i > 0) {
           json += ",";
         }

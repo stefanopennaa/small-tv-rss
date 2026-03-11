@@ -656,8 +656,11 @@ const char INDEX_HTML[] PROGMEM = R"(
             ]);
         })();
 
-        // Auto-refresh device data every 60 seconds
-        setInterval(loadDeviceData, CONFIG.AUTO_REFRESH_INTERVAL_MS);
+        // Auto-refresh device data and news every 60 seconds
+        setInterval(() => {
+            loadDeviceData();
+            loadNewsData();
+        }, CONFIG.AUTO_REFRESH_INTERVAL_MS);
     </script>
 </body>
 
