@@ -48,10 +48,11 @@ constexpr unsigned long CLOCK_REFRESH_MS = 5000UL;   // Clock refresh interval w
 // Color Theme (RGB565 Format)
 // =====================================================================
 
-constexpr uint16_t BG_COLOR = ST77XX_BLACK;  // Background: Black
-constexpr uint16_t TEMP_COLOR = 0xFD20;      // Temperature: Orange/Red
-constexpr uint16_t HUM_COLOR = 0x07FF;       // Humidity: Cyan/Blue
-constexpr uint16_t DESC_COLOR = 0xC618;      // Weather description: Purple
+constexpr uint16_t BG_COLOR = ST77XX_BLACK;       // Background: Black
+constexpr uint16_t TEMP_COLOR = 0xFD20;           // Temperature: Orange/Red
+constexpr uint16_t HUM_COLOR = 0x07FF;            // Humidity: Cyan/Blue
+constexpr uint16_t DESC_COLOR = 0xC618;           // Weather description: Purple
+constexpr uint16_t CLOCK_MINUTES_COLOR = 0xFEE0;  // Clock minutes: warm yellow/orange
 
 // =====================================================================
 // Screen Layout Configuration
@@ -85,18 +86,26 @@ constexpr int16_t HUMI_ICON_Y = 195;
 constexpr int16_t RSS_ICON_X = 10;  // RSS feed icon (top-left)
 constexpr int16_t RSS_ICON_Y = 10;
 
-// Status Message Position
-constexpr int16_t STATUS_TEXT_X = 10;  // Boot/error message text position
-constexpr int16_t STATUS_TEXT_Y = 10;
+// Status Message Positioning
+constexpr int16_t STATUS_TEXT_X = 10;          // Generic status text top-left X
+constexpr int16_t STATUS_TEXT_Y = 10;          // Generic status text top-left Y
+constexpr int16_t STATUS_TEXT_CENTER_Y = 132;  // Boot/sync status text top-left Y when centered
 
-// =====================================================================
-// Marquee (Scrolling Text) Configuration
-// =====================================================================
+// Clock Layout
+constexpr int16_t CLOCK_TOP_Y = 45;     // Clock text top-left Y
+constexpr int16_t CLOCK_COLON_GAP = 5;  // Extra spacing around the colon
 
-constexpr unsigned long MARQUEE_INTERVAL_MS = 500;  // Animation frame interval (milliseconds)
-constexpr int16_t MARQUEE_Y = 110;                  // Vertical position on screen
-constexpr int16_t MARQUEE_H = 16;                   // Text height (pixels)
-constexpr int16_t MARQUEE_STEP_PX = 5;              // Horizontal scroll distance per frame
+// Weather Text Layout
+constexpr int16_t WEATHER_TEXT_Y1 = 142;  // Temperature text top-left Y
+constexpr int16_t WEATHER_TEXT_Y2 = 187;  // Humidity text top-left Y
+
+// News Text Layout
+constexpr int16_t NEWS_TEXT_X = 10;     // News body top-left X
+constexpr int16_t NEWS_TEXT_Y = 50;     // News body top-left Y
+constexpr int16_t NEWS_MAX_W = 220;     // News text max width
+constexpr int16_t NEWS_MAX_H = 145;     // News text height budget
+constexpr int16_t NEWS_LINE_H = 29;     // News line height for Oswald 10pt
+constexpr int16_t NEWS_FOOTER_Y = 210;  // Source footer top-left Y
 
 // =====================================================================
 // Boot Sequence and Timing Configuration

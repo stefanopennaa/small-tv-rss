@@ -1,11 +1,11 @@
 // =====================================================================
 // SmallTV Firmware - ESP8266 Weather Clock with RSS Feed Display
 // =====================================================================
-// Version: 2026.03.07 (Improved)
+// Version: 2026.03.11 (UI and Typography Cleanup)
 //
 // Hardware: GeekMagic SmallTV (ESP8266 + ST7789 240x240 TFT)
 //
-// Main Features:
+// Features:
 // - Real-time clock with NTP sync (Italy timezone: CET/CEST with DST)
 // - Live weather data from OpenWeatherMap API (temperature, humidity, conditions)
 // - RSS news feed from ANSA (Italian news agency)
@@ -15,30 +15,18 @@
 // - Secure credential management (WiFi and API keys in separate files)
 // - Optimized boot sequence with timeout protection
 // - Smooth animations during WiFi connection and NTP synchronization
-// - Scrolling marquee text display
+// - Hybrid typography: Bebas Neue clock + Oswald UI/news text
+// - Centralized display/layout constants in config.h
+// - Removed legacy marquee text rendering
 // - Flash-optimized storage (all icons and HTML in PROGMEM)
 //
 // Architecture:
 // 1) setup()   - Hardware initialization, WiFi connection, NTP sync, web server startup
 // 2) loop()    - Non-blocking event handlers (WiFi/NTP retry, data refresh, UI updates)
 // 3) Rendering - Alternates between home screen and paged news scene
-//
-// Code Quality Improvements (v2026.03.07):
-// - Replaced magic numbers with named constants for maintainability
-// - Added input validation on HTTP endpoints (security hardening)
-// - Implemented size limits on HTTP responses (buffer overflow protection)
-// - Added JSON key validation before data access (crash prevention)
-// - Refactored duplicate animation code into reusable function
-// - Created time interval helper to reduce code duplication
-// - Improved variable naming consistency (weather data structure)
-// - Enhanced error handling throughout network operations
-// - Added bounds checking on array access operations
-// - Implemented safe string formatting with buffer size checks
 // =====================================================================
 
 #include <Adafruit_GFX.h>
-#include <Fonts/FreeSans9pt7b.h>
-#include <Fonts/FreeSansBold18pt7b.h>
 #include <Adafruit_ST7789.h>
 #include <SPI.h>
 #include <ESP8266WiFi.h>
@@ -53,6 +41,12 @@
 #include <string.h>
 
 #include "config.h"
+// Custom GFX fonts generated from local TTF assets:
+// - Bebas Neue: digital clock only
+// - Oswald: weather metrics and RSS/news text
+#include "fonts/Bebas_Neue/BebasNeue42pt7b.h"
+#include "fonts/Oswald/OswaldRegular10pt7b.h"
+#include "fonts/Oswald/OswaldSemiBold14pt7b.h"
 
 // Web UI HTML page stored in flash memory
 #include "index_html.h"
@@ -164,15 +158,12 @@ unsigned long lastNewsUpdate = 0;     // Last successful news feed fetch
 bool initialDataFetched = false;      // True after first data fetch completes
 
 // Display State
-bool showNews = false;                // Toggle between clock and news scenes
-int currentNewsIndex = 0;             // Currently displayed news item index
-unsigned long lastDisplay = 0;        // Scene switching timer
-unsigned long lastClockRefresh = 0;   // Clock refresh timer (while in clock scene)
-int lastMinute = -1;                  // Last displayed minute (avoids redundant clock redraws)
-unsigned long lastMarqueeUpdate = 0;  // Marquee animation timer
-int16_t marqueeX = SCREEN_W;          // Current X position of scrolling text
-char marqueeMessage[32] = "Torino";   // Scrolling marquee text content
-bool offlineScreenShown = false;      // True when timeout/offline screen is currently displayed
+bool showNews = false;               // Toggle between clock and news scenes
+int currentNewsIndex = 0;            // Currently displayed news item index
+unsigned long lastDisplay = 0;       // Scene switching timer
+unsigned long lastClockRefresh = 0;  // Clock refresh timer (while in clock scene)
+int lastMinute = -1;                 // Last displayed minute (avoids redundant clock redraws)
+bool offlineScreenShown = false;     // True when timeout/offline screen is currently displayed
 
 // Display Brightness
 // Value range: 0-255 (automatically inverted for PWM since this panel uses inverted backlight control)
@@ -243,21 +234,26 @@ bool validateBrightnessInput(const String& input, int& output) {
 // =====================================================================
 
 // showStatus()
-// Displays a full-screen status message with customizable color and position
+// Displays a full-screen status message with customizable color and position.
 // Used during boot sequence, WiFi connection, NTP sync, and OTA updates
 // Parameters:
 //   msg   - Text message to display
 //   color - Text color (RGB565 format)
-//   x, y  - Screen coordinates for text positioning
+//   x, y  - Top-left screen coordinates for text positioning
 void showStatus(const String& msg,
                 uint16_t color = ST77XX_WHITE,
                 int16_t x = STATUS_TEXT_X,
                 int16_t y = STATUS_TEXT_Y) {
   tft.fillScreen(BG_COLOR);
+  tft.setFont(&Oswald_Regular10pt7b);
   tft.setTextColor(color);
-  tft.setTextSize(2);
-  tft.setCursor(x, y);
+  tft.setTextSize(1);
+  int16_t x1, y1;
+  uint16_t w, h;
+  tft.getTextBounds(msg.c_str(), 0, 0, &x1, &y1, &w, &h);
+  tft.setCursor(x - x1, y - y1);
   tft.print(msg);
+  tft.setFont(NULL);
 }
 
 // drawRGB565_P()
@@ -286,6 +282,59 @@ void drawRGB565_P(int16_t x, int16_t y, int16_t w, int16_t h, const uint16_t* ic
     // Draw the buffered line to display
     tft.drawRGBBitmap(x, y + row, line, w, 1);
   }
+}
+
+// measureTextWidth()
+// Returns rendered width for the currently selected font.
+int16_t measureTextWidth(const String& text) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  tft.getTextBounds(text.c_str(), 0, 0, &x1, &y1, &w, &h);
+  return static_cast<int16_t>(w);
+}
+
+// drawTextTopLeft()
+// Draws text using top-left coordinates instead of baseline coordinates.
+void drawTextTopLeft(int16_t x, int16_t y, const String& text) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  tft.getTextBounds(text.c_str(), 0, 0, &x1, &y1, &w, &h);
+  tft.setCursor(x - x1, y - y1);
+  tft.print(text);
+}
+
+// drawTextCenteredX()
+// Draws text horizontally centered inside the provided width using top-left Y.
+void drawTextCenteredX(int16_t areaX, int16_t areaY, int16_t areaW, const String& text) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  tft.getTextBounds(text.c_str(), 0, 0, &x1, &y1, &w, &h);
+  const int16_t drawX = areaX + ((areaW - static_cast<int16_t>(w)) / 2);
+  tft.setCursor(drawX - x1, areaY - y1);
+  tft.print(text);
+}
+
+// showStatusCentered()
+// Convenience wrapper around showStatus() for centered boot/status messages.
+void showStatusCentered(const String& msg,
+                        uint16_t color = ST77XX_WHITE,
+                        int16_t y = STATUS_TEXT_CENTER_Y) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  tft.setFont(&Oswald_Regular10pt7b);
+  tft.setTextSize(1);
+  tft.getTextBounds(msg.c_str(), 0, 0, &x1, &y1, &w, &h);
+  const int16_t centeredX = (SCREEN_W - static_cast<int16_t>(w)) / 2;
+  tft.setFont(NULL);
+  showStatus(msg, color, centeredX, y);
+}
+
+// drawClockSegment()
+// Draws one clock segment and returns the next top-left X position.
+int16_t drawClockSegment(int16_t x, int16_t y, const String& text, uint16_t color, int16_t trailingGap = 0) {
+  tft.setTextColor(color);
+  drawTextTopLeft(x, y, text);
+  return x + measureTextWidth(text) + trailingGap;
 }
 
 // =====================================================================
@@ -422,13 +471,13 @@ void setBrightness(int value) {
 // Note: Uses WiFi.persistent(false) to avoid excessive flash wear
 WiFiConnectResult ICACHE_FLASH_ATTR connectWiFi() {
   if (strlen(WIFI_SSID) == 0) {
-    showStatus(UI.wifiMissing, ST77XX_RED, 15, 110);
+    showStatusCentered(UI.wifiMissing, ST77XX_RED);
     delay(WIFI_STATUS_DELAY_MS);
     lastWiFiResult = WiFiConnectResult::MissingCredentials;
     return lastWiFiResult;
   }
 
-  showStatus(UI.wifi, ST77XX_WHITE, 78, 135);
+  showStatusCentered(UI.wifi, ST77XX_WHITE);
   WiFi.persistent(false);  // Avoid flash writes on reconnect loops.
   WiFi.setAutoConnect(true);
   WiFi.setAutoReconnect(true);
@@ -464,13 +513,13 @@ WiFiConnectResult ICACHE_FLASH_ATTR connectWiFi() {
 
   const bool connected = (WiFi.status() == WL_CONNECTED);
   if (connected) {
-    showStatus(UI.connected, ST77XX_GREEN, 60, 110);
+    showStatusCentered(UI.connected, ST77XX_GREEN);
     delay(WIFI_CONNECTED_DELAY_MS);
-    showStatus(String(UI.ipPrefix) + WiFi.localIP().toString(), ST77XX_WHITE, 18, 110);
+    showStatusCentered(String(UI.ipPrefix) + WiFi.localIP().toString(), ST77XX_WHITE);
     delay(WIFI_STATUS_DELAY_MS);
     lastWiFiResult = WiFiConnectResult::Connected;
   } else {
-    showStatus(UI.wifiTimeout, ST77XX_YELLOW, 40, 110);
+    showStatusCentered(UI.wifiTimeout, ST77XX_YELLOW);
     delay(WIFI_STATUS_DELAY_MS);
     lastWiFiResult = WiFiConnectResult::Timeout;
   }
@@ -491,7 +540,7 @@ bool ICACHE_FLASH_ATTR syncNTP() {
     return false;
   }
 
-  showStatus(UI.ntpSync, ST77XX_WHITE, 54, 135);
+  showStatusCentered(UI.ntpSync, ST77XX_WHITE);
 
   // Configure NTP servers and Italy timezone (CET-1CEST with DST)
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
@@ -546,9 +595,8 @@ bool ICACHE_FLASH_ATTR syncNTP() {
   ntpSynced = (time(nullptr) >= 100000);
 
   // Show result status
-  showStatus(ntpSynced ? UI.synced : UI.failed,
-             ntpSynced ? ST77XX_GREEN : ST77XX_RED,
-             78, 110);
+  showStatusCentered(ntpSynced ? UI.synced : UI.failed,
+                     ntpSynced ? ST77XX_GREEN : ST77XX_RED);
   delay(NTP_STATUS_DELAY_MS);
   tft.fillScreen(BG_COLOR);
 
@@ -778,12 +826,12 @@ void fetchAnsaRSS(const char* feedUrl) {
 void drawWeather() {
   // Clear weather panel area
   tft.fillRect(0, 125, 240, 115, BG_COLOR);
-  tft.drawFastHLine(20, 135, 200, 0x4208);  // Separator line
+  tft.drawFastHLine(20, 125, 200, 0x4208);  // Separator line
 
   // === TEMPERATURE DISPLAY ===
-  tft.setTextSize(2);
+  tft.setFont(&Oswald_SemiBold14pt7b);
+  tft.setTextSize(1);
   tft.setTextColor(TEMP_COLOR);
-  tft.setCursor(45, 150);
 
   // Temperature progress bar background
   tft.drawRoundRect(45, 170, 80, 9, 50, ST77XX_WHITE);
@@ -800,12 +848,10 @@ void drawWeather() {
   // Temperature text
   char tempText[12];
   snprintf(tempText, sizeof(tempText), "%.1fC", weatherTemp);
-  tft.print(tempText);
+  drawTextTopLeft(45, WEATHER_TEXT_Y1, tempText);
 
   // === HUMIDITY DISPLAY ===
-  tft.setTextSize(2);
   tft.setTextColor(HUM_COLOR);
-  tft.setCursor(45, 195);
 
   // Humidity progress bar background
   tft.drawRoundRect(45, 215, 80, 9, 50, ST77XX_WHITE);
@@ -822,12 +868,13 @@ void drawWeather() {
   // Humidity text
   char humidityText[8];
   snprintf(humidityText, sizeof(humidityText), "%d%%", weatherHumidity);
-  tft.print(humidityText);
+  drawTextTopLeft(45, WEATHER_TEXT_Y2, humidityText);
 
   // Weather condition icon (right side)
   drawRGB565_P(MM_ICON_X, MM_ICON_Y, MM_RGB565_W, MM_RGB565_H, MM_RGB565);
 
   // Reset text color for future draws
+  tft.setFont(NULL);
   tft.setTextColor(ST77XX_WHITE);
 }
 
@@ -842,14 +889,6 @@ void drawWeather() {
 // Parameters:
 //   index - Index of news item to display (0 to NEWS_MAX-1)
 void drawNews(int index) {
-  const int16_t textX = 10;
-  const int16_t textY = 50;
-  const int16_t maxW = 220;  // 240 - margins
-  const int16_t maxH = 185;  // from textY down to bottom margin
-  const int16_t charW = 12;  // default font at text size 2
-  const int16_t lineH = 16;  // default font at text size 2
-  const int16_t maxChars = maxW / charW;
-
   tft.fillScreen(BG_COLOR);
 
   // RSS Icon
@@ -858,15 +897,14 @@ void drawNews(int index) {
   // RSS News
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextWrap(false);
-  tft.setTextSize(2);
+  tft.setTextSize(1);
+  tft.setFont(&Oswald_Regular10pt7b);
 
-  tft.setCursor(textX, textY);
   if (index < 0 || index >= NEWS_MAX || newsTitles[index].length() == 0) {
-    tft.print("No news available");
+    drawTextTopLeft(NEWS_TEXT_X, NEWS_TEXT_Y, "No news available");
   } else {
     // Current item index (1-based)
-    tft.setCursor(185, 10);
-    tft.print(String(index + 1) + "/" + String(NEWS_MAX));
+    drawTextTopLeft(185, 10, String(index + 1) + "/" + String(NEWS_MAX));
 
     // Normalize text before wrapping (single spaces, no newlines).
     String text = newsTitles[index];
@@ -875,10 +913,10 @@ void drawNews(int index) {
 
     // Word-wrap renderer: wraps on spaces, avoids splitting words.
     String line = "";
-    int y = textY;
+    int y = NEWS_TEXT_Y;
     int pos = 0;
 
-    while (pos < text.length() && (y - textY) <= maxH) {
+    while (pos < text.length() && (y - NEWS_TEXT_Y) <= NEWS_MAX_H) {
       while (pos < text.length() && text[pos] == ' ') pos++;
       int start = pos;
       while (pos < text.length() && text[pos] != ' ') pos++;
@@ -886,47 +924,55 @@ void drawNews(int index) {
       if (word.length() == 0) continue;
 
       String candidate = (line.length() == 0) ? word : (line + " " + word);
-      if (candidate.length() <= maxChars) {
+      if (measureTextWidth(candidate) <= NEWS_MAX_W) {
         line = candidate;
         continue;
       }
 
       if (line.length() > 0) {
-        tft.setCursor(textX, y);
-        tft.print(line);
-        y += lineH;
+        drawTextTopLeft(NEWS_TEXT_X, y, line);
+        y += NEWS_LINE_H;
       }
 
-      if (word.length() <= maxChars) {
+      if (measureTextWidth(word) <= NEWS_MAX_W) {
         line = word;
       } else {
         // Fallback for single words longer than one full line.
-        int wp = 0;
-        while (wp < word.length() && (y - textY) <= maxH) {
-          String chunk = word.substring(wp, wp + maxChars);
-          tft.setCursor(textX, y);
-          tft.print(chunk);
-          y += lineH;
-          wp += maxChars;
+        int wp = 1;
+        while (wp <= word.length() && (y - NEWS_TEXT_Y) <= NEWS_MAX_H) {
+          String chunk = word.substring(0, wp);
+          while (measureTextWidth(chunk) <= NEWS_MAX_W && wp <= word.length()) {
+            wp++;
+            chunk = word.substring(0, wp);
+          }
+          if (measureTextWidth(chunk) > NEWS_MAX_W) {
+            wp--;
+            chunk = word.substring(0, wp);
+          }
+
+          drawTextTopLeft(NEWS_TEXT_X, y, chunk);
+          y += NEWS_LINE_H;
+          word.remove(0, wp);
+          wp = 1;
         }
         line = "";
       }
     }
 
-    if (line.length() > 0 && (y - textY) <= maxH) {
-      tft.setCursor(textX, y);
-      tft.print(line);
+    if (line.length() > 0 && (y - NEWS_TEXT_Y) <= NEWS_MAX_H) {
+      drawTextTopLeft(NEWS_TEXT_X, y, line);
     }
   }
 
   // Fonte
-  tft.setCursor(10, 210);
-  tft.print("Fonte: ANSA");
+  drawTextTopLeft(NEWS_TEXT_X, NEWS_FOOTER_Y, "Fonte: ANSA");
+  tft.setFont(NULL);
 }
 
 // drawClock()
 // Renders digital clock display in the upper panel
-// Shows current time in HH:MM format (24-hour) using large bold font
+// Shows current time in HH:MM format (24-hour) using Bebas Neue 42pt
+// Hours stay white while minutes use CLOCK_MINUTES_COLOR
 // Displays "--:--" if NTP sync has not yet succeeded
 // Automatically centers the time display on screen
 // Called periodically by the main loop to update the clock display
@@ -944,16 +990,30 @@ void drawClock() {
     }
   }
 
-  tft.setFont(&FreeSansBold18pt7b);
-  int16_t x1, y1;
-  uint16_t w, h;
-  tft.getTextBounds(timeStr, 0, 0, &x1, &y1, &w, &h);
-  int cx = ((240 - w) / 2) - 5;
-  int cy = 40 + h;
-  tft.fillRect(25, 35, 190, 65, BG_COLOR);
-  tft.setTextColor(ST77XX_WHITE);
-  tft.setCursor(cx, cy);
-  tft.print(timeStr);
+  tft.setFont(&BebasNeue_Regular42pt7b);
+  tft.setTextSize(1);
+  tft.fillRect(0, 0, SCREEN_W, 116, BG_COLOR);
+  if (strlen(timeStr) == 5 && timeStr[2] == ':') {
+    String hours = String(timeStr).substring(0, 2);
+    String colon = ":";
+    String minutes = String(timeStr).substring(3, 5);
+
+    int16_t x1, y1;
+    uint16_t hoursW, hoursH, colonW, colonH, minutesW, minutesH;
+    tft.getTextBounds(hours.c_str(), 0, 0, &x1, &y1, &hoursW, &hoursH);
+    tft.getTextBounds(colon.c_str(), 0, 0, &x1, &y1, &colonW, &colonH);
+    tft.getTextBounds(minutes.c_str(), 0, 0, &x1, &y1, &minutesW, &minutesH);
+
+    const int16_t totalW = static_cast<int16_t>(hoursW + colonW + minutesW + (CLOCK_COLON_GAP * 2));
+    int16_t drawX = (SCREEN_W - totalW) / 2;
+
+    drawX = drawClockSegment(drawX, CLOCK_TOP_Y, hours, ST77XX_WHITE, CLOCK_COLON_GAP);
+    drawX = drawClockSegment(drawX, CLOCK_TOP_Y + 15, colon, ST77XX_WHITE, CLOCK_COLON_GAP);
+    drawClockSegment(drawX, CLOCK_TOP_Y, minutes, CLOCK_MINUTES_COLOR);
+  } else {
+    tft.setTextColor(ST77XX_WHITE);
+    drawTextCenteredX(0, CLOCK_TOP_Y, SCREEN_W, timeStr);
+  }
   tft.setFont(NULL);
 }
 
@@ -961,7 +1021,7 @@ void drawClock() {
 // OTA (Over-The-Air Update) Callback Functions
 // =====================================================================
 // These callbacks are triggered by ElegantOTA during firmware updates
-// Important: Avoid SPI display operations during actual flash writing
+// Important: Avoid SPI display operations during  atual flash writing
 
 // onOTAStart()
 // Called when OTA update begins
@@ -1084,33 +1144,6 @@ void tickNews(unsigned long now) {
   }
 }
 
-// tickMarquee()
-// Animates scrolling marquee text across the display
-// Moves text horizontally at intervals defined by MARQUEE_INTERVAL_MS
-// Text wraps around when it scrolls off the left edge
-// Only active when home screen is visible (pauses during news scene)
-void tickMarquee(unsigned long now) {
-  if (showNews) return;
-  if (now - lastMarqueeUpdate < MARQUEE_INTERVAL_MS) return;
-
-  lastMarqueeUpdate = now;
-  tft.fillRect(0, MARQUEE_Y, SCREEN_W, MARQUEE_H, BG_COLOR);
-  tft.setTextSize(2);
-  tft.setTextColor(ST77XX_WHITE);
-  // Prevent line-wrap artifacts when marqueeX becomes negative.
-  tft.setTextWrap(false);
-  tft.setCursor(marqueeX, MARQUEE_Y);
-  tft.print(marqueeMessage);
-
-  int16_t bx, by;
-  uint16_t bw, bh;
-  tft.getTextBounds(marqueeMessage, 0, 0, &bx, &by, &bw, &bh);
-  marqueeX -= MARQUEE_STEP_PX;
-  if (marqueeX < -bw) {
-    marqueeX = SCREEN_W;
-  }
-}
-
 // tickClockRefresh()
 // Redraws the clock display only when the displayed minute has changed,
 // checked every CLOCK_REFRESH_MS while in the clock scene
@@ -1150,7 +1183,6 @@ void tickSceneScheduler(unsigned long now) {
   if (currentNewsIndex >= NEWS_MAX) {
     showNews = false;
     tft.fillScreen(BG_COLOR);
-    marqueeX = SCREEN_W;
     drawClock();
     drawWeather();
   } else {
@@ -1319,7 +1351,7 @@ void setup() {
     const char* offlineMsg = (lastWiFiResult == WiFiConnectResult::MissingCredentials)
                                ? UI.wifiMissing
                                : UI.wifiTimeout;
-    showStatus(offlineMsg, ST77XX_YELLOW, 40, 110);
+    showStatusCentered(offlineMsg, ST77XX_YELLOW);
     offlineScreenShown = true;
   }
 
@@ -1345,7 +1377,6 @@ void setup() {
 //      - Initial data fetch (one-time after boot)
 //      - Periodic weather updates
 //      - Periodic news feed updates
-//      - Marquee scrolling animation
 //      - Scene switching logic
 //
 // Note: All tasks are non-blocking with time-based scheduling
@@ -1364,7 +1395,7 @@ void loop() {
                                  : ((lastWiFiResult == WiFiConnectResult::Timeout)
                                       ? UI.wifiTimeout
                                       : UI.wifiOffline);
-      showStatus(offlineMsg, ST77XX_YELLOW, 40, 110);
+      showStatusCentered(offlineMsg, ST77XX_YELLOW);
       offlineScreenShown = true;
     }
 
@@ -1387,7 +1418,6 @@ void loop() {
     showNews = false;
     currentNewsIndex = 0;
     lastDisplay = now;
-    marqueeX = SCREEN_W;
     drawClock();
     drawWeather();
     time_t t = time(nullptr);
@@ -1402,7 +1432,6 @@ void loop() {
   tickInitialDataFetch(now);
   tickWeather(now);
   tickNews(now);
-  tickMarquee(now);
   tickClockRefresh(now);
   tickSceneScheduler(now);
 }

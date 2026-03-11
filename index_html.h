@@ -29,11 +29,16 @@ const char INDEX_HTML[] PROGMEM = R"(
     </script>
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@400;500;600&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
             background: #f8f9fa;
             min-height: 100vh;
+            font-family: 'Oswald', sans-serif;
+            letter-spacing: 0.02em;
         }
 
         [data-bs-theme="dark"] body {
@@ -88,7 +93,9 @@ const char INDEX_HTML[] PROGMEM = R"(
 
         .header h1 {
             margin: 0;
+            font-family: 'Bebas Neue', sans-serif;
             font-weight: 700;
+            letter-spacing: 0.05em;
             background: linear-gradient(135deg, #FFD93D 0%, #FF6B35 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -96,25 +103,60 @@ const char INDEX_HTML[] PROGMEM = R"(
         }
 
         .metric-value {
+            font-family: 'Bebas Neue', sans-serif;
             font-size: clamp(1.5rem, 4vw, 2.5rem);
             font-weight: 700;
+            letter-spacing: 0.05em;
             margin: 0.5rem 0;
         }
 
         .metric-label {
+            font-family: 'Oswald', sans-serif;
             font-size: 0.875rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.08em;
             opacity: 0.7;
             font-weight: 600;
         }
 
+        .section-title,
+        .detail-value,
+        .footer-text {
+            font-family: 'Oswald', sans-serif;
+        }
+
+        .section-title {
+            font-weight: 500;
+            letter-spacing: 0.03em;
+        }
+
+        .detail-value {
+            font-weight: 500;
+        }
+
         .btn-custom {
+            font-family: 'Oswald', sans-serif;
             background: linear-gradient(135deg, #FFD93D 0%, #FF6B35 100%);
             border: none;
             color: white;
             font-weight: 600;
             transition: all 0.3s ease;
+        }
+
+        .news-list,
+        .status-badge,
+        .form-label,
+        .form-text,
+        .card-text,
+        .text-muted,
+        p,
+        li,
+        a,
+        button,
+        input,
+        label,
+        span {
+            font-family: 'Oswald', sans-serif;
         }
 
         .btn-custom:hover {
@@ -229,13 +271,13 @@ const char INDEX_HTML[] PROGMEM = R"(
                     </div>
                     <div class="card metric-card text-center p-4 rounded-4">
                         <div class="metric-label">Meteo</div>
-                        <div class="fs-5 fw-bold mt-2" id="desc">
+                        <div class="detail-value fs-5 fw-bold mt-2" id="desc">
                             <span class="loading">--</span>
                         </div>
                     </div>
                     <div class="card metric-card text-center p-4 rounded-4">
                         <div class="metric-label">Indirizzo IP</div>
-                        <div class="fs-6 fw-bold text-success mt-2" id="ip">
+                        <div class="detail-value fs-6 fw-bold text-success mt-2" id="ip">
                             <span class="loading">--</span>
                         </div>
                     </div>
@@ -247,7 +289,7 @@ const char INDEX_HTML[] PROGMEM = R"(
                 <div class="d-flex flex-column gap-3">
                     <!-- Actions -->
                     <div class="card p-4 rounded-4">
-                        <h5 class="mb-3 d-flex align-items-center gap-2">
+                        <h5 class="section-title mb-3 d-flex align-items-center gap-2">
                             <span>⚙️</span>
                             <span>Azioni</span>
                         </h5>
@@ -265,7 +307,7 @@ const char INDEX_HTML[] PROGMEM = R"(
 
                     <!-- Brightness -->
                     <div class="card p-4 rounded-4">
-                        <h5 class="mb-3 d-flex align-items-center gap-2">
+                        <h5 class="section-title mb-3 d-flex align-items-center gap-2">
                             <span>💡</span>
                             <span>Luminosità</span>
                         </h5>
@@ -298,7 +340,7 @@ const char INDEX_HTML[] PROGMEM = R"(
 
                     <!-- News -->
                     <div class="card p-4 rounded-4">
-                        <h5 class="mb-3 d-flex align-items-center gap-2">
+                        <h5 class="section-title mb-3 d-flex align-items-center gap-2">
                             <span aria-hidden="true">📰</span>
                             <span>Notizie</span>
                         </h5>
@@ -320,7 +362,7 @@ const char INDEX_HTML[] PROGMEM = R"(
 
         <!-- Footer -->
         <footer class="text-center mt-4">
-            <p class="text-muted small mb-0">
+            <p class="footer-text text-muted small mb-0">
                 Ultimo aggiornamento: 
                 <time id="last-update" datetime="">--</time>
             </p>

@@ -1,7 +1,7 @@
 # 📺 SmallTV RSS - ESP8266 Weather Clock & News Feed Display
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2026.03.07-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-2026.03.11-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/platform-ESP8266-green.svg" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="License">
   <img src="https://img.shields.io/badge/Arduino-Compatible-teal.svg" alt="Arduino">
@@ -22,14 +22,16 @@ A feature-rich firmware for the **GeekMagic SmallTV** (ESP8266 + ST7789 240x240 
 ### 🕐 **NTP Clock with DST Support**
 - Accurate time synchronization via NTP servers
 - Italy timezone configuration (CET/CEST) with automatic DST transitions
-- Large, easy-to-read digital display with custom fonts
+- Large, easy-to-read digital display with custom GFX fonts
+- Two-tone clock styling with highlighted minutes for faster reading
+- Centered boot/sync status messages placed below the startup icons
 - Graceful fallback when network is unavailable
 
 ### 📰 **RSS News Feed**
 - ANSA Top News integration (Italian news agency)
 - Fetches and displays up to 3 latest headlines
 - HTTPS support with automatic retries
-- Word-wrapped news display with pagination
+- Word-wrapped news display with pagination and proportional font measurement
 
 ### 🌐 **Responsive Web Interface**
 - Modern Bootstrap 5 dashboard
@@ -51,8 +53,8 @@ A feature-rich firmware for the **GeekMagic SmallTV** (ESP8266 + ST7789 240x240 
 ### 🎨 **Visual Feedback**
 - Smooth WiFi connection animations
 - NTP sync spinner with progress indication
-- Scrolling marquee text display
 - Status icons and color-coded messages
+- Mixed typography: Bebas Neue for the clock, Oswald for weather/news text
 - All graphics stored in flash memory (PROGMEM)
 
 ### 🔒 **Security & Robustness**
@@ -103,6 +105,14 @@ ElegantOTA            // OTA updates
 2. Go to **Tools → Manage Libraries**
 3. Search and install each library listed above
 4. Ensure ArduinoJson version is **6.x or higher**
+
+### Bundled Font Assets
+- `fonts/Bebas_Neue/`: retained source TTF, license file, and the generated `BebasNeue42pt7b.h` used by the clock
+- `fonts/Oswald/`: retained license file plus the generated `OswaldRegular10pt7b.h` and `OswaldSemiBold14pt7b.h` used by firmware text
+- `fonts/Oswald/static/`: retained only `Oswald-Regular.ttf` and `Oswald-SemiBold.ttf`, which are the source files for the generated headers
+- Text placement with `GFXfont` is normalized through helpers based on `getTextBounds()`, so layout coordinates are handled as top-left or centered positions instead of raw baselines
+- Boot/status labels and clock segment spacing are managed through shared helper functions and layout constants to keep rendering behavior consistent
+- Stable hardware, timing, color, and display-layout constants live in `config.h`; the sketch keeps only rendering logic and temporary local values
 
 ---
 
@@ -184,12 +194,6 @@ Default brightness is set in `setup()`:
 setBrightness(50);  // 0 (off) to 255 (max)
 ```
 You can also adjust it via the web interface slider.
-
-### Marquee Text
-Edit the scrolling message in the code:
-```cpp
-char marqueeMessage[32] = "Your custom text here!";
-```
 
 ### Display Colors
 Customize the color theme in `config.h`:
@@ -395,6 +399,23 @@ Contributions are welcome! Here's how you can help:
 
 ## 📝 Changelog
 
+### Version 2026.03.11 (UI and Typography Cleanup)
+#### 🔤 Typography
+- Added Bebas Neue as the dedicated clock font on the TFT display
+- Added Oswald for weather values, RSS headlines, and supporting UI text
+- Reworked RSS/news wrapping to measure proportional font width correctly
+- Updated the web dashboard to use Bebas Neue for display-style headings and Oswald for readable body text
+- Increased the clock font to `BebasNeue42pt7b` for better legibility on the 240x240 TFT
+- Added a dedicated warm yellow/orange color for clock minutes
+- Standardized firmware text positioning with helpers based on `getTextBounds()` to avoid baseline-related misalignment
+- Centered WiFi/NTP boot messages below icons and refined clock spacing/alignment
+- Cleaned up text-rendering helpers to reduce duplication and centralize layout logic
+- Removed the unused marquee subsystem and related configuration
+
+#### 📁 Assets
+- Reorganized bundled font resources into `fonts/Bebas_Neue/` and `fonts/Oswald/`
+- Added generated `GFXfont` headers for the currently used font sizes
+
 ### Version 2026.03.07 (Improved)
 #### 🔒 Security
 - Added input validation on HTTP endpoints
@@ -427,7 +448,6 @@ Contributions are welcome! Here's how you can help:
 - Initial release with core features
 - WiFi + NTP + Weather + RSS functionality
 - Web interface with OTA updates
-- Scrolling marquee display
 
 ---
 
