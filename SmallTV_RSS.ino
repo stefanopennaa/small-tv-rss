@@ -1384,7 +1384,13 @@ void setup() {
   showStatusCentered("Fetching data...", ST77XX_WHITE);
   fetchWeather();
   fetchAnsaRSS(ANSA_RSS_URL);
-  initialDataFetched = true;
+
+  // Only mark as fetched if both succeeded; otherwise tickInitialDataFetch will retry
+  bool weatherOk = lastWeatherError.isEmpty();
+  bool newsOk = lastNewsError.isEmpty();
+  if (weatherOk && newsOk) {
+    initialDataFetched = true;
+  }
 
   // ElegantOTA
   ElegantOTA.begin(&server);
