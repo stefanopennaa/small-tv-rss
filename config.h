@@ -40,7 +40,7 @@ constexpr unsigned long NEWS_INTERVAL_MS = 600000UL;
 
 // Scene Display Durations
 // Controls how long each screen type is visible before switching
-constexpr unsigned long DISPLAY_CLOCK_MS = 60000UL;  // Clock scene: 1 minute
+constexpr unsigned long DISPLAY_CLOCK_MS = 15000UL;  // Clock scene: 15 seconds
 constexpr unsigned long DISPLAY_NEWS_MS = 5000UL;    // News scene: 5 seconds per item
 constexpr unsigned long CLOCK_REFRESH_MS = 5000UL;   // Clock refresh interval while in clock scene
 
@@ -138,13 +138,12 @@ constexpr unsigned long INITIAL_DATA_FETCH_DELAY_MS = 1200;  // Delay before fir
 // Short timeouts ensure UI remains responsive even on slow/unreliable networks
 
 // HTTP Request Timeouts
-constexpr uint16_t WEATHER_HTTP_TIMEOUT_MS = 2500;  // OpenWeatherMap API timeout (2.5 sec)
-constexpr uint16_t RSS_HTTP_TIMEOUT_MS = 3500;      // RSS feed fetch timeout (3.5 sec)
+constexpr uint16_t HTTP_TIMEOUT_MS = 3500;  // Standard HTTP request timeout (3.5 sec) for all data fetches
 
 // Request Retry Logic
-// RSS feeds can fail due to TLS handshake issues or redirects - retry once automatically
-constexpr uint8_t RSS_HTTP_ATTEMPTS = 2;    // Number of attempts for RSS fetch
-constexpr uint8_t RSS_RETRY_DELAY_MS = 30;  // Delay between retry attempts
+// Both weather and RSS can fail due to transient network issues - retry automatically
+constexpr uint8_t HTTP_MAX_RETRIES = 2;      // Number of total attempts (initial + retries)
+constexpr uint8_t HTTP_RETRY_DELAY_MS = 30;  // Delay between retry attempts
 
 // Response Size Limits (security/stability)
 constexpr size_t RSS_MAX_RESPONSE_SIZE = 32768;     // Maximum RSS feed size (32 KB)

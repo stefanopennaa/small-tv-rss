@@ -139,52 +139,70 @@ enum class WiFiConnectResult : uint8_t {
 
 // ===== Global State Variables =====
 
-// System State
+// ===== BOOT & SYSTEM STATE =====
 BootState bootState = BootState::BOOT_WIFI;                     // Current boot/initialization phase
 WiFiConnectResult lastWiFiResult = WiFiConnectResult::Timeout;  // Result of last WiFi connection attempt
 bool ntpSynced = false;                                         // True when NTP time sync is successful
 bool otaInProgress = false;                                     // True during OTA firmware update
 unsigned long bootMs = 0;                                       // Timestamp when device booted
 
-// Network Retry Timers
+// ===== NETWORK RETRY TIMERS =====
 unsigned long lastWiFiRetry = 0;  // Last WiFi reconnection attempt
 unsigned long lastNtpRetry = 0;   // Last NTP sync retry
 
-// Data Refresh Timers
-unsigned long lastWeatherFetch = 0;   // Last weather data fetch attempt
-unsigned long lastNewsFetch = 0;      // Last RSS feed fetch attempt
-unsigned long lastWeatherUpdate = 0;  // Last successful weather API call
-unsigned long lastNewsUpdate = 0;     // Last successful news feed fetch
-bool initialDataFetched = false;      // True after first data fetch completes
+// ===== WEATHER DATA (OpenWeatherMap API) =====
+float weatherTemp = 0;                    // Temperature in Celsius
+int weatherHumidity = 0;                  // Relative humidity percentage
+String weatherDesc = "";                  // Weather condition description (e.g., "Partly cloudy")
+unsigned long lastWeatherFetchTime = 0;   // Timestamp of last fetch attempt (regardless of success)
+unsigned long lastWeatherUpdateTime = 0;  // Timestamp of last successful fetch
+String lastWeatherError = "";             // Last error message from weather API fetch
 
-// Display State
-bool showNews = false;               // Toggle between clock and news scenes
-int currentNewsIndex = 0;            // Currently displayed news item index
-unsigned long lastDisplay = 0;       // Scene switching timer
+// ===== NEWS DATA (ANSA RSS Feed) =====
+String newsTitles[NEWS_MAX];           // News headlines from ANSA feed
+String newsLinks[NEWS_MAX];            // URLs for each news item
+unsigned long lastNewsFetchTime = 0;   // Timestamp of last feed fetch attempt (regardless of success)
+unsigned long lastNewsUpdateTime = 0;  // Timestamp of last successful news fetch
+int lastNewsHttpCode = 0;              // HTTP response code from last fetch attempt
+String lastNewsError = "";             // Error message from last fetch attempt
+int lastNewsCount = 0;                 // Number of items successfully parsed from latest feed
+bool initialDataFetched = false;       // True once both weather AND news have been fetched successfully
+
+// ===== UI DISPLAY STATE =====
+bool showNews = false;               // Toggle: false = clock/weather scene, true = news scene
+int currentNewsIndex = 0;            // Currently displayed news item index (0 to NEWS_MAX-1)
+unsigned long lastDisplay = 0;       // Scene switching timer (when to switch to next scene)
 unsigned long lastClockRefresh = 0;  // Clock refresh timer (while in clock scene)
 int lastMinute = -1;                 // Last displayed minute (avoids redundant clock redraws)
-bool offlineScreenShown = false;     // True when timeout/offline screen is currently displayed
+bool offlineScreenShown = false;     // True when timeout/offline error screen is currently displayed
 
-// Display Brightness
+// ===== DISPLAY BRIGHTNESS =====
 // Value range: 0-255 (automatically inverted for PWM since this panel uses inverted backlight control)
 int currentBrightness = 50;
-
-// Weather Data (from OpenWeatherMap API)
-float weatherTemp = 0;         // Temperature in Celsius
-int weatherHumidity = 0;       // Relative humidity percentage
-String weatherDesc = "";       // Weather condition description (e.g., "Partly cloudy")
-String lastWeatherError = "";  // Last error message from weather API
-
-// RSS News Feed Data
-String newsTitles[NEWS_MAX];  // News headlines from ANSA feed
-String newsLinks[NEWS_MAX];   // URLs for each news item
-int lastNewsHttpCode = 0;     // HTTP response code from last feed fetch
-String lastNewsError = "";    // Error message from last fetch attempt
-int lastNewsCount = 0;        // Number of items successfully parsed
 
 // =====================================================================
 // Utility Helper Functions
 // =====================================================================
+
+// isWiFiConnected()
+// Quick check for WiFi connectivity status
+// Returns: true if WiFi is connected, false otherwise
+bool isWiFiConnected() {
+  return WiFi.status() == WL_CONNECTED;
+}
+
+// ensureWiFiConnected()
+// Helper that sets error message and returns false if WiFi is down
+// Used by fetch functions to standardize connection validation
+// Parameters: errorString - Reference to error variable to populate if disconnected
+// Returns: true if WiFi connected, false if disconnected (with error message set)
+bool ensureWiFiConnected(String& errorString) {
+  if (!isWiFiConnected()) {
+    errorString = UI.wifiOffline;
+    return false;
+  }
+  return true;
+}
 
 // hasIntervalPassed()
 // Checks if a time interval has elapsed and updates the last time marker
@@ -535,7 +553,7 @@ WiFiConnectResult ICACHE_FLASH_ATTR connectWiFi() {
 // Returns: true if sync successful, false otherwise
 // Note: Animation is visible for at least NTP_MIN_SYNC_ANIM_MS to provide user feedback
 bool ICACHE_FLASH_ATTR syncNTP() {
-  if (WiFi.status() != WL_CONNECTED) {
+  if (!isWiFiConnected()) {
     ntpSynced = false;
     return false;
   }
@@ -609,25 +627,18 @@ bool ICACHE_FLASH_ATTR syncNTP() {
 
 // fetchWeather()
 // Fetches current weather data from OpenWeatherMap API
-// Updates global variables: weatherTemp, weatherHumidity, weatherDesc, lastWeatherUpdate
+// Updates global variables: weatherTemp, weatherHumidity, weatherDesc, lastWeatherUpdateTime
 // Silently fails if WiFi is disconnected or API key is missing
-// Uses short timeout (WEATHER_HTTP_TIMEOUT_MS) to keep UI responsive
+// Uses HTTP_TIMEOUT_MS and automatic retry logic (HTTP_MAX_RETRIES) for resilience
 // Note: Coordinates are configured in config.h (OWM_LAT, OWM_LON)
 void fetchWeather() {
   // Pre-flight checks
-  if (WiFi.status() != WL_CONNECTED) {
-    lastWeatherError = UI.wifiOffline;
-    return;
-  }
+  if (!ensureWiFiConnected(lastWeatherError)) return;
 
   if (strlen(OWM_API_KEY) == 0) {
     lastWeatherError = "API key missing";
     return;
   }
-
-  WiFiClientSecure client;
-  client.setInsecure();
-  HTTPClient http;
 
   // Build OpenWeatherMap API URL
   String url = "https://api.openweathermap.org/data/2.5/weather?lat=";
@@ -638,54 +649,72 @@ void fetchWeather() {
   url += OWM_API_KEY;
   url += "&units=metric&lang=it";
 
-  http.begin(client, url);
-  http.setTimeout(WEATHER_HTTP_TIMEOUT_MS);
+  int code = -1;
 
-  // Perform HTTP GET request
-  int code = http.GET();
+  // Retry loop: attempt multiple times for transient network failures
+  for (uint8_t attempt = 0; attempt < HTTP_MAX_RETRIES; attempt++) {
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
 
-  if (code == HTTP_CODE_OK) {
-    // Security check: validate response size before reading
-    int contentLength = http.getSize();
-    if (contentLength > 0 && contentLength > WEATHER_MAX_RESPONSE_SIZE) {
-      lastWeatherError = "Response too large";
-      http.end();
-      return;
-    }
+    http.begin(client, url);
+    http.setTimeout(HTTP_TIMEOUT_MS);
 
-    // Read and parse JSON response
-    String payload = http.getString();
-    StaticJsonDocument<1024> doc;
-    DeserializationError err = deserializeJson(doc, payload);
+    // Perform HTTP GET request
+    code = http.GET();
 
-    if (!err) {
-      // Validate JSON structure before accessing keys (prevents crashes)
-      if (doc.containsKey("main") && doc["main"].containsKey("temp") && doc["main"].containsKey("humidity") && doc.containsKey("weather") && doc["weather"].size() > 0) {
-
-        // Extract weather data
-        weatherTemp = doc["main"]["temp"].as<float>();
-        weatherHumidity = doc["main"]["humidity"].as<int>();
-        weatherDesc = doc["weather"][0]["description"].as<String>();
-
-        // Capitalize first letter of description
-        if (weatherDesc.length() > 0) {
-          weatherDesc[0] = toupper(weatherDesc[0]);
-        }
-
-        lastWeatherUpdate = millis();
-        lastWeatherError = "";
-
-      } else {
-        lastWeatherError = "Invalid JSON structure";
+    if (code == HTTP_CODE_OK) {
+      // Security check: validate response size before reading
+      int contentLength = http.getSize();
+      if (contentLength > 0 && contentLength > WEATHER_MAX_RESPONSE_SIZE) {
+        lastWeatherError = "Response too large";
+        http.end();
+        return;
       }
-    } else {
-      lastWeatherError = "JSON parse error";
-    }
-  } else {
-    lastWeatherError = "HTTP error: " + String(code);
-  }
 
-  http.end();
+      // Read and parse JSON response
+      String payload = http.getString();
+      StaticJsonDocument<1024> doc;
+      DeserializationError err = deserializeJson(doc, payload);
+
+      http.end();
+
+      if (!err) {
+        // Validate JSON structure before accessing keys (prevents crashes)
+        if (doc.containsKey("main") && doc["main"].containsKey("temp") && doc["main"].containsKey("humidity") && doc.containsKey("weather") && doc["weather"].size() > 0) {
+
+          // Extract weather data
+          weatherTemp = doc["main"]["temp"].as<float>();
+          weatherHumidity = doc["main"]["humidity"].as<int>();
+          weatherDesc = doc["weather"][0]["description"].as<String>();
+
+          // Capitalize first letter of description
+          if (weatherDesc.length() > 0) {
+            weatherDesc[0] = toupper(weatherDesc[0]);
+          }
+
+          lastWeatherUpdateTime = millis();
+          lastWeatherError = "";
+          return;  // Success - exit retry loop
+
+        } else {
+          lastWeatherError = "Invalid JSON structure";
+        }
+      } else {
+        lastWeatherError = "JSON parse error";
+      }
+      return;  // Parsing errors shouldn't retry
+
+    } else {
+      // HTTP error - may be transient, retry if attempts remaining
+      lastWeatherError = "HTTP error: " + String(code);
+      http.end();
+
+      if (attempt < HTTP_MAX_RETRIES - 1) {
+        delay(HTTP_RETRY_DELAY_MS);
+      }
+    }
+  }
 }
 
 // parseRssItems()
@@ -741,16 +770,15 @@ int parseRssItems(const String& xml, String* outTitles, String* outLinks, int ma
 // fetchAnsaRSS()
 // Fetches ANSA news RSS feed over HTTPS
 // Updates global arrays: newsTitles[], newsLinks[]
-// Updates diagnostics: lastNewsHttpCode, lastNewsError, lastNewsCount, lastNewsUpdate
+// Updates diagnostics: lastNewsHttpCode, lastNewsError, lastNewsCount, lastNewsUpdateTime
 // Preserves previous news data if fetch fails (graceful degradation)
-// Uses automatic retry logic (RSS_HTTP_ATTEMPTS) to handle transient network errors
+// Uses automatic retry logic (HTTP_MAX_RETRIES) to handle transient network errors
 // Parameters:
 //   feedUrl - URL of RSS feed to fetch (must be HTTPS for ANSA)
 void fetchAnsaRSS(const char* feedUrl) {
   // Pre-flight check
-  if (WiFi.status() != WL_CONNECTED) {
+  if (!ensureWiFiConnected(lastNewsError)) {
     lastNewsHttpCode = -1;
-    lastNewsError = UI.wifiOffline;
     return;
   }
 
@@ -761,10 +789,10 @@ void fetchAnsaRSS(const char* feedUrl) {
   String xml;
 
   // Retry loop for transient network failures
-  for (uint8_t attempt = 0; attempt < RSS_HTTP_ATTEMPTS; attempt++) {
+  for (uint8_t attempt = 0; attempt < HTTP_MAX_RETRIES; attempt++) {
     HTTPClient http;
     http.begin(client, feedUrl);
-    http.setTimeout(RSS_HTTP_TIMEOUT_MS);
+    http.setTimeout(HTTP_TIMEOUT_MS);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     http.addHeader("User-Agent", "Mozilla/5.0");
 
@@ -794,8 +822,8 @@ void fetchAnsaRSS(const char* feedUrl) {
     http.end();
 
     // Delay before next attempt (except on last attempt)
-    if (attempt < RSS_HTTP_ATTEMPTS - 1) {
-      delay(RSS_RETRY_DELAY_MS);
+    if (attempt < HTTP_MAX_RETRIES - 1) {
+      delay(HTTP_RETRY_DELAY_MS);
     }
   }
 
@@ -810,7 +838,7 @@ void fetchAnsaRSS(const char* feedUrl) {
                                   NEWS_MAX, lastNewsError);
 
     if (lastNewsCount > 0) {
-      lastNewsUpdate = millis();
+      lastNewsUpdateTime = millis();
     }
   } else {
     lastNewsError = "HTTP error: " + String(code);
@@ -910,7 +938,7 @@ void drawNews(int index) {
     drawTextTopLeft(NEWS_TEXT_X, NEWS_TEXT_Y, "No news available");
   } else {
     // Current item index (1-based)
-    drawTextTopLeft(185, 10, String(index + 1) + "/" + String(lastNewsCount));
+    drawTextTopLeft(200, 17, String(index + 1) + "/" + String(lastNewsCount));
 
     // Normalize text before wrapping (single spaces, no newlines).
     String text = newsTitles[index];
@@ -1072,7 +1100,7 @@ void onOTAEnd(bool success) {
 // Updates boot state based on reconnection result
 // Allows device to recover automatically from temporary network outages
 void tickWiFiRetry(unsigned long now) {
-  if (WiFi.status() == WL_CONNECTED) return;
+  if (isWiFiConnected()) return;
   if (now - lastWiFiRetry < WIFI_RETRY_INTERVAL_MS) return;
 
   lastWiFiRetry = now;
@@ -1091,7 +1119,7 @@ void tickWiFiRetry(unsigned long now) {
 // Updates boot state based on sync result
 // Ensures accurate time even if initial NTP sync failed during boot
 void tickNtpRetry(unsigned long now) {
-  if (WiFi.status() != WL_CONNECTED) return;
+  if (!isWiFiConnected()) return;
   if (ntpSynced) return;
   if (now - lastNtpRetry < NTP_RETRY_INTERVAL_MS) return;
 
@@ -1112,20 +1140,29 @@ void tickNtpRetry(unsigned long now) {
 }
 
 // tickInitialDataFetch()
-// Performs the first data fetch after a short delay following boot
-// Defers initial HTTP requests (INITIAL_DATA_FETCH_DELAY_MS) so the UI appears quickly
-// Fetches both weather and news data in a single burst
-// Runs only once per boot cycle
+// Retry mechanism: if initial fetch in setup() failed, retries periodically
+// Exits immediately once both weather AND news data are successfully fetched
+// Retries every 30 seconds if either fetch has error state
 void tickInitialDataFetch(unsigned long now) {
   if (initialDataFetched) return;
-  if (now - bootMs < INITIAL_DATA_FETCH_DELAY_MS) return;
 
-  fetchWeather();
-  fetchAnsaRSS(ANSA_RSS_URL);
-  lastWeatherFetch = now;
-  lastNewsFetch = now;
-  initialDataFetched = true;
-  if (!showNews) drawWeather();
+  // Check if both fetches succeeded (no error messages)
+  bool weatherOk = lastWeatherError.isEmpty();
+  bool newsOk = lastNewsError.isEmpty();
+
+  if (weatherOk && newsOk) {
+    initialDataFetched = true;
+    if (!showNews) drawWeather();
+    return;
+  }
+
+  // If either failed, retry every 30 seconds
+  static unsigned long lastRetry = 0;
+  if (now - lastRetry < 30000UL) return;
+
+  lastRetry = now;
+  if (!weatherOk) fetchWeather();
+  if (!newsOk) fetchAnsaRSS(ANSA_RSS_URL);
 }
 
 // tickWeather()
@@ -1134,7 +1171,7 @@ void tickInitialDataFetch(unsigned long now) {
 // Automatically refreshes the weather display panel after successful fetch
 // Only updates display when home screen is visible (not during news scene)
 void tickWeather(unsigned long now) {
-  if (hasIntervalPassed(lastWeatherFetch, OWM_INTERVAL_MS, now)) {
+  if (hasIntervalPassed(lastWeatherFetchTime, OWM_INTERVAL_MS, now)) {
     fetchWeather();
     if (!showNews) drawWeather();
   }
@@ -1145,7 +1182,7 @@ void tickWeather(unsigned long now) {
 // Runs at intervals defined by NEWS_INTERVAL_MS (typically 10 minutes)
 // Updates news data used by the news scene scheduler
 void tickNews(unsigned long now) {
-  if (hasIntervalPassed(lastNewsFetch, NEWS_INTERVAL_MS, now)) {
+  if (hasIntervalPassed(lastNewsFetchTime, NEWS_INTERVAL_MS, now)) {
     fetchAnsaRSS(ANSA_RSS_URL);
   }
 }
@@ -1242,8 +1279,8 @@ void setup() {
     ntpSynced = false;
   }
 
-  lastWeatherFetch = millis();
-  lastNewsFetch = millis();
+  lastWeatherFetchTime = millis();
+  lastNewsFetchTime = millis();
   lastDisplay = millis();
 
   // HTTP Endpoint: GET /
@@ -1267,8 +1304,8 @@ void setup() {
 
       unsigned long now = millis();
       // Calculate data age in milliseconds (sentinel value -1 means "never fetched")
-      long weatherAge = (lastWeatherUpdate == 0) ? -1L : (long)(now - lastWeatherUpdate);
-      long newsAge = (lastNewsUpdate == 0) ? -1L : (long)(now - lastNewsUpdate);
+      long weatherAge = (lastWeatherUpdateTime == 0) ? -1L : (long)(now - lastWeatherUpdateTime);
+      long newsAge = (lastNewsUpdateTime == 0) ? -1L : (long)(now - lastNewsUpdateTime);
 
       char json[512];
       snprintf(
@@ -1315,7 +1352,7 @@ void setup() {
       json += "\"http\":" + String(lastNewsHttpCode) + ",";
       json += "\"count\":" + String(lastNewsCount) + ",";
       json += "\"error\":\"" + jsonEscape(lastNewsError) + "\",";
-      json += "\"age_ms\":" + String(millis() - lastNewsFetch);
+      json += "\"age_ms\":" + String(millis() - lastNewsFetchTime);
       json += "}}";
 
       server.send(200, "application/json", json);
@@ -1344,6 +1381,7 @@ void setup() {
     });
 
   // Fetch weather and news immediately before first render, then skip deferred initial fetch.
+  showStatusCentered("Fetching data...", ST77XX_WHITE);
   fetchWeather();
   fetchAnsaRSS(ANSA_RSS_URL);
   initialDataFetched = true;
@@ -1356,7 +1394,7 @@ void setup() {
   server.begin();
 
   // Show home scene only if network is connected; otherwise keep timeout/offline status.
-  if (WiFi.status() == WL_CONNECTED) {
+  if (isWiFiConnected()) {
     drawClock();
     drawWeather();
   } else {
@@ -1400,7 +1438,7 @@ void loop() {
 
   unsigned long now = millis();
 
-  if (WiFi.status() != WL_CONNECTED) {
+  if (!isWiFiConnected()) {
     if (!offlineScreenShown) {
       const char* offlineMsg = (lastWiFiResult == WiFiConnectResult::MissingCredentials)
                                  ? UI.wifiMissing
@@ -1422,10 +1460,11 @@ void loop() {
 
   if (offlineScreenShown) {
     // WiFi restored: refresh network-backed data immediately instead of waiting periodic intervals.
+    showStatusCentered("Fetching data...", ST77XX_WHITE);
     fetchWeather();
     fetchAnsaRSS(ANSA_RSS_URL);
-    lastWeatherFetch = now;
-    lastNewsFetch = now;
+    lastWeatherFetchTime = now;
+    lastNewsFetchTime = now;
 
     showNews = false;
     currentNewsIndex = 0;
