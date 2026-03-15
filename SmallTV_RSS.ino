@@ -860,7 +860,6 @@ void fetchAnsaRSS(const char* feedUrl) {
 void drawWeather() {
   // Clear weather panel area
   tft.fillRect(0, 125, 240, 115, BG_COLOR);
-  tft.drawFastHLine(20, 125, 200, 0x4208);  // Separator line
 
   // === TEMPERATURE DISPLAY ===
   tft.setFont(&Oswald_SemiBold14pt7b);
@@ -1026,7 +1025,7 @@ void drawClock() {
 
   tft.setFont(&BebasNeue_Regular42pt7b);
   tft.setTextSize(1);
-  tft.fillRect(0, 0, SCREEN_W, 116, BG_COLOR);
+  tft.fillRect(0, 0, SCREEN_W, 115, BG_COLOR);
   if (strlen(timeStr) == 5 && timeStr[2] == ':') {
     String hours = String(timeStr).substring(0, 2);
     String colon = ":";
@@ -1217,11 +1216,22 @@ void tickSceneScheduler(unsigned long now) {
 
   unsigned long interval = showNews ? DISPLAY_NEWS_MS : DISPLAY_CLOCK_MS;
   if (now - lastDisplay < interval) {
+    // If it's not time to switch scenes yet => progress bar
+    if (!showNews) {
+      // Clock progress bar
+      // Multiply before divide to avoid integer division truncation to 0
+      tft.fillRoundRect(10, 120, ((now - lastDisplay) * 220) / interval, 5, 2, ST77XX_WHITE);
+    } else {
+      // News progress bar
+      // Multiply before divide to avoid integer division truncation to 0
+      tft.fillRoundRect(10, 190, ((now - lastDisplay) * 220) / interval, 5, 2, ST77XX_ORANGE);
+    }
     return;
   }
 
   lastDisplay = now;
   if (!showNews) {
+    // Switch to the news scene
     showNews = true;
     currentNewsIndex = 0;
     drawNews(currentNewsIndex);
@@ -1230,6 +1240,7 @@ void tickSceneScheduler(unsigned long now) {
 
   currentNewsIndex++;
   if (currentNewsIndex >= lastNewsCount) {
+    // Switch to the clock scene
     showNews = false;
     tft.fillScreen(BG_COLOR);
     drawClock();
