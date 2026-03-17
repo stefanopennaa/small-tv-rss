@@ -39,11 +39,16 @@ constexpr int NEWS_MAX = 3;
 constexpr unsigned long NEWS_INTERVAL_MS = 600000UL;
 
 // =====================================================================
-// GTT feed (Turin Transport Group)
+// GTT feed (Turin Transport Group) - ⚠️ BETA FEATURE
 // =====================================================================
+// Current limitations:
+//   - Single stop only (hardcoded stop ID)
+//   - No nearby stops discovery
+//   - No user-selectable stops UI
+// Future: multi-stop support, nearby stops, stop selector
 
-// GTT API url
-constexpr char GTT_STOP_URL[] = "http://gpa.madbob.org/query.php?stop=3445";  // 3445 GTT stop (Sabotino Cap.)
+// GTT API url (⚠️ BETA: currently supports only 1 fixed stop)
+constexpr char GTT_STOP_URL[] = "https://gpa.madbob.org/query.php?stop=3445";  // 3445 GTT stop (Sabotino Cap.)
 
 // GTT feed refresh interval (1 minute)
 constexpr unsigned long GTT_INTERVAL_MS = 60000UL;  // update GTT feed every 1 minute

@@ -17,7 +17,7 @@ Smart weather station + RSS news reader + GTT stop monitor for **GeekMagic Small
 - 🌡️ **Live Weather**: OpenWeatherMap API, temperature/humidity panel, auto-update every 10 minutes
 - 🕐 **NTP Clock**: Italy timezone (CET/CEST with DST), large Bebas Neue clock font
 - 📰 **RSS Feed**: ANSA top news (3 headlines), HTTPS fetch, retry logic
-- 🚌 **GTT Feed**: Turin bus stop data (`/gtt_data`) with unified fallback (same data on TFT + web)
+- 🚌 **GTT Feed** ⚠️ **BETA**: Turin bus stop data (`/gtt_data`) with unified fallback (same data on TFT + web)
 - 🌐 **Web Dashboard**: Bootstrap 5, mobile responsive, brightness slider, status panels
 - 🔄 **OTA Updates**: Wireless firmware update via ElegantOTA (`/update`)
 - 🎨 **Custom UI**: Scene rotation (clock/news/GTT), weather + RSS + GTT icons, custom GFX fonts
@@ -80,7 +80,7 @@ Edit `config.h`:
 constexpr char OWM_LAT[] = "45.0703";
 constexpr char OWM_LON[] = "7.6869";
 constexpr char ANSA_RSS_URL[] = "https://www.ansa.it/sito/notizie/topnews/topnews_rss.xml";
-constexpr char GTT_STOP_URL[] = "http://gpa.madbob.org/query.php?stop=3445";
+constexpr char GTT_STOP_URL[] = "https://gpa.madbob.org/query.php?stop=3445";  // ⚠️ BETA: Currently supports only 1 fixed stop (ID 3445)
 ```
 
 **5. Upload firmware:**
@@ -162,7 +162,25 @@ Init display -> WiFi connect -> NTP sync -> HTTP routes + OTA -> Initial fetch -
 
 ---
 
-## 🐛 Troubleshooting
+## ⚠️ Beta Features
+
+### GTT Feed (Transit Data)
+
+The GTT (Gruppo Torinese Trasporti) feed is **currently in BETA** with the following limitations:
+
+- **Single stop only**: Currently monitors a single hardcoded bus stop (ID 3445)
+- **No nearby stops**: Cannot auto-detect stops near your location
+- **No stop selection UI**: Stop ID must be changed manually in `config.h`
+
+**Future improvements** (roadmap):
+- Multi-stop support from `/gtt_data` endpoint
+- Nearby stops discovery by GPS/address
+- Web UI stop selector and favorites
+- Real-time arrival countdown
+
+For now, use the fallback dataset if the API is unavailable.
+
+---
 
 | Issue | Quick checks |
 |-------|--------------|
@@ -171,6 +189,7 @@ Init display -> WiFi connect -> NTP sync -> HTTP routes + OTA -> Initial fetch -
 | Clock shows `--:--` | NTP requires internet; wait retry cycle (60s) |
 | RSS empty/errors | Check internet/TLS availability and ANSA feed reachability |
 | GTT unavailable | Check `GTT_STOP_URL`; fallback dataset is used automatically |
+| **GTT limitations** ⚠️ | **BETA feature**: Currently supports only 1 fixed bus stop. Nearby stops and custom stop selection coming soon. |
 | Brightness not changing | Use `/brightness?value=128` (range `0-255`) |
 | OTA failed | Keep device powered, retry from `/update` |
 

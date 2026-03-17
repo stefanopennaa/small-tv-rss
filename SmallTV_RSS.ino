@@ -1032,7 +1032,14 @@ int parseGttStops(const String& jsonStr, GttStop* outStops, int maxStops, String
 
     if (item.containsKey("line") && item.containsKey("hour") && item.containsKey("realtime")) {
       outStops[found].line = item["line"].as<String>();
-      outStops[found].hour = item["hour"].as<String>();
+      String fullTime = item["hour"].as<String>();
+
+      // Extract only HH:MM (discard seconds if present)
+      if (fullTime.length() >= 5) {
+        outStops[found].hour = fullTime.substring(0, 5);  // Get first 5 chars (HH:MM)
+      } else {
+        outStops[found].hour = fullTime;
+      }
 
       // Parse realtime flag (API may send boolean or string).
       JsonVariant realtimeValue = item["realtime"];
@@ -1055,11 +1062,14 @@ int parseGttStops(const String& jsonStr, GttStop* outStops, int maxStops, String
 }
 
 // fetchGTT()
-// Fetches GTT bus stop data from local API (query.php)
+// ⚠️ BETA FUNCTION: Fetches GTT bus stop data from local API (query.php)
+// Limitations:
+//   - Supports only 1 hardcoded stop ID (currently 3445)
+//   - No multi-stop support, no nearby stops discovery, no stop selection UI
 // Updates global array: gttStops[]
 // Updates diagnostics: lastGttError, lastGttCount, lastGttUpdateTime
 // Parameters:
-//   apiUrl - URL of GTT API endpoint
+//   apiUrl - URL of GTT API endpoint (e.g., https://gpa.madbob.org/query.php?stop=XXXX)
 void fetchGTT(const char* apiUrl) {
   // Pre-flight check
   if (!ensureWiFiConnected(lastGttError)) {
@@ -1294,13 +1304,14 @@ void drawNews(int index) {
 }
 
 // drawGTT()
-// Renders GTT bus stop information on TFT display
-// Shows up to 3 different bus lines with next 3 departure times each
-// Real-time stops shown in green, scheduled stops in grey
+// ⚠️ BETA FUNCTION: Renders GTT bus stop information on TFT display
+// Limitations:
+//   - Single stop only (hardcoded in config.h)
+//   - Fixed layout: up to 3 different bus lines, each with next 3 departure times
+// Shows real-time stops in green, scheduled stops in grey
 // Gracefully handles empty data (shows error or "no data" message)
 // Layout: Up to 3 unique bus lines, each with 3 departure times
 // Colors: Green (realtime), Grey (scheduled)
-// Displays line number, hour, and realtime indicator
 void drawGTT() {
   tft.fillScreen(BG_COLOR);
   tft.setFont(&Oswald_Regular10pt7b);
@@ -1579,11 +1590,12 @@ void tickNews(unsigned long now) {
 }
 
 // tickGTT()
-// Periodically fetches updated GTT bus stop data
+// ⚠️ BETA FUNCTION: Periodically fetches updated GTT bus stop data
 // Runs at intervals defined by GTT_INTERVAL_MS (typically 60 seconds)
 // Updates GTT data used by drawGTT() on TFT display
 // Handles network errors gracefully - display shows last cached data or fallback
 // Note: HTTP requests are synchronous but bounded by short timeouts
+// Limitation: Fetches only 1 hardcoded stop (multi-stop coming in future release)
 void tickGTT(unsigned long now) {
   if (hasIntervalPassed(lastGttFetchTime, GTT_INTERVAL_MS, now)) {
     fetchGTT(GTT_STOP_URL);
