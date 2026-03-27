@@ -250,7 +250,8 @@ const char GTT_HTML[] PROGMEM = R"(
                 });
 
                 let html = '';
-                Object.keys(grouped).sort().forEach((line) => {
+                // Keep server order so secondary-stop lines stay at the end.
+                Object.keys(grouped).forEach((line) => {
                     html += '<div class="bus-line-container">';
                     html += '<div class="card bus-card p-3 rounded-4">';
                     html += '<div class="line-row">';

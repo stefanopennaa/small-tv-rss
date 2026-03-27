@@ -17,7 +17,7 @@ Smart weather station + RSS news + GTT bus monitor for **GeekMagic SmallTV** wit
 - 🌡️ **Weather**: OpenWeatherMap API with temperature/humidity panel
 - 🕐 **NTP Clock**: Italy timezone (CET/CEST) with large clock display
 - 📰 **RSS Feed**: ANSA top news with automatic rotation
-- 🚌 **GTT** ⚠️ **BETA**: Turin bus stop data (single stop only)
+- 🚌 **GTT** ⚠️ **BETA**: Turin bus stop data (2 fixed stops merged, compact 4×2 display)
 - 🌐 **Web Dashboard**: Bootstrap 5, mobile responsive, brightness control
 - 🔄 **OTA Updates**: Wireless firmware updates via `/update`
 - 🎨 **Custom UI**: Auto scene rotation, custom fonts and icons
@@ -95,9 +95,10 @@ Edit `config.h` for:
 ## ⚠️ Known Limitations
 
 **GTT Feed (BETA):**
-- Only supports **one fixed stop** (change in `config.h`)
+- Supports **2 fixed stops** (`GTT_STOP_URL_1`, `GTT_STOP_URL_2`) merged into one list
+- TFT layout is fixed to **4 lines × 2 times per line**
 - No nearby stops discovery or web UI selector
-- Future: multi-stop support, favorites, countdown timers
+- Future: dynamic stop selection, favorites, countdown timers
 
 **Error Display:**
 - Display shows user-friendly messages ("Dati non disponibili", "News non disponibili")
@@ -119,6 +120,12 @@ Edit `config.h` for:
 ---
 
 ## 📝 Changelog
+
+### v2026.03.27 - GTT Layout Refresh
+- GTT scene now shows up to **4 bus lines** (instead of 3)
+- Each line now shows up to **2 departure times** (instead of 3) to avoid wrapping
+- Added and integrated `OswaldSemiBold10pt7b` for clearer line numbers
+- README and inline comments aligned with current GTT behavior
 
 ### v2026.03.26 - Display Error Messages
 - Display shows user-friendly error messages: "Dati non disponibili" (GTT), "News non disponibili" (News)

@@ -26,6 +26,7 @@
 // - Oswald: weather metrics and RSS/news text
 #include "fonts/Bebas_Neue/BebasNeue42pt7b.h"
 #include "fonts/Oswald/OswaldRegular10pt7b.h"
+#include "fonts/Oswald/OswaldSemiBold10pt7b.h"
 #include "fonts/Oswald/OswaldSemiBold14pt7b.h"
 
 // Web UI HTML pages stored in flash memory
@@ -158,14 +159,14 @@ struct GttStop {
   bool realtime;  // true=realtime data, false=scheduled
 };
 
-constexpr int GTT_MAX = 6;            // Maximum number of GTT stops to display (3 lines × 3 times)
+constexpr int GTT_MAX = 8;            // Maximum number of GTT stops to display (4 lines × 2 times)
 GttStop gttStops[GTT_MAX];            // Array of bus stop data
 unsigned long lastGttFetchTime = 0;   // Timestamp of last GTT fetch attempt
 unsigned long lastGttUpdateTime = 0;  // Timestamp of last successful GTT fetch
 String lastGttError = "";             // Error message from last fetch attempt
 int lastGttCount = 0;                 // Number of stops successfully parsed from latest fetch
-constexpr uint8_t GTT_LINES_ON_SCREEN = 3;
-constexpr uint8_t GTT_TIMES_PER_LINE = 3;
+constexpr uint8_t GTT_LINES_ON_SCREEN = 4;
+constexpr uint8_t GTT_TIMES_PER_LINE = 2;
 constexpr size_t GTT_JSON_DOC_SIZE = 1024;
 
 // ===== UI DISPLAY STATE (Scene Machine) =====
@@ -194,7 +195,7 @@ constexpr int16_t SCENE_PROGRESS_HEIGHT = 5;
 constexpr int16_t SCENE_PROGRESS_RADIUS = 2;
 constexpr int16_t SCENE_PROGRESS_Y_CLOCK = 120;
 constexpr int16_t SCENE_PROGRESS_Y_NEWS = 190;
-constexpr int16_t SCENE_PROGRESS_Y_GTT = 206;
+constexpr int16_t SCENE_PROGRESS_Y_GTT = 216;
 
 constexpr int16_t WEATHER_TEMP_BAR_X = 45;
 constexpr int16_t WEATHER_TEMP_BAR_Y = 170;
@@ -1233,19 +1234,25 @@ void fetchGTT(const char* apiUrl) {
   lastGttError = "";
   lastGttCount = 0;
 
-  // Merge results into global gttStops array
+  // Merge policy:
+  // 1) Primary stop first (main rows)
+  // 2) Keep a reserved tail for secondary stop so it can appear in the last rows
   int mergedCount = 0;
+  int idx1 = 0;
+  int idx2 = 0;
 
-  // Add stops from first stop
-  for (int i = 0; i < count1 && mergedCount < GTT_MAX; i++) {
-    gttStops[mergedCount] = tempStops1[i];
-    mergedCount++;
+  // Reserve at least one full line (2 time slots) for the secondary stop when available.
+  const int secondaryReserve = (count2 > 0) ? min(static_cast<int>(GTT_TIMES_PER_LINE), count2) : 0;
+  const int primaryBudget = GTT_MAX - secondaryReserve;
+
+  while (idx1 < count1 && mergedCount < primaryBudget) {
+    gttStops[mergedCount++] = tempStops1[idx1++];
   }
-
-  // Add stops from second stop
-  for (int i = 0; i < count2 && mergedCount < GTT_MAX; i++) {
-    gttStops[mergedCount] = tempStops2[i];
-    mergedCount++;
+  while (idx2 < count2 && mergedCount < GTT_MAX) {
+    gttStops[mergedCount++] = tempStops2[idx2++];
+  }
+  while (idx1 < count1 && mergedCount < GTT_MAX) {
+    gttStops[mergedCount++] = tempStops1[idx1++];
   }
 
   lastGttCount = mergedCount;
@@ -1430,14 +1437,16 @@ void drawNews(int index) {
 }
 
 // drawGTT()
-// ⚠️ BETA FUNCTION: Renders GTT bus stop information on TFT display
-// Limitations:
-//   - Multiple stops supported (2 stops configured: 3445 and 3742)
-//   - Fixed layout: up to 3 different bus lines, each with next 3 departure times
-// Shows real-time stops in green, scheduled stops in grey
-// If no valid stops are available, shows "Dati non disponibili" (detailed errors on web only)
-// Layout: Up to 3 unique bus lines, each with 3 departure times
-// Colors: Green (realtime), Grey (scheduled)
+// ⚠️ BETA FUNCTION: renders merged GTT bus data on TFT.
+// Source model:
+//   - Data comes from two configured stops (see GTT_STOP_URL_1/2) and is merged.
+// Rendering model:
+//   - Fixed grid: up to 4 unique lines, up to 2 departure times per line.
+//   - Line label uses SemiBold 10pt; times use Regular 10pt.
+// Colors:
+//   - Realtime = green, scheduled = grey.
+// Fallback:
+//   - If no valid rows are available, display "Dati non disponibili".
 void drawGTT() {
   tft.fillScreen(BG_COLOR);
   tft.setFont(&Oswald_Regular10pt7b);
@@ -1490,9 +1499,9 @@ void drawGTT() {
     }
   }
 
-  // Draw 3 rows (one per line)
-  int16_t yPos = GTT_ICON_Y + GTT_ICON_H + 32;
-  const int16_t rowHeight = 44;
+  // Draw 4 rows (one per line)
+  int16_t yPos = GTT_ICON_Y + GTT_ICON_H + 22;
+  const int16_t rowHeight = 40;
   const int16_t timeWidth = 70;  // Space per time column
 
   for (uint8_t lineIdx = 0; lineIdx < GTT_LINES_ON_SCREEN; lineIdx++) {
@@ -1500,11 +1509,11 @@ void drawGTT() {
 
     // Draw line number (left column)
     tft.setTextColor(ST77XX_CYAN);
-    tft.setFont(&Oswald_SemiBold14pt7b);
-    tft.setCursor(10, yPos + 15);
+    tft.setFont(&Oswald_SemiBold10pt7b);
+    tft.setCursor(10, yPos + 12);
     tft.print(gttStops[lineSeedIdx[lineIdx]].line);
 
-    // Draw 3 time slots for this line
+    // Draw 2 time slots for this line
     tft.setFont(&Oswald_Regular10pt7b);
     for (uint8_t timeIdx = 0; timeIdx < GTT_TIMES_PER_LINE; timeIdx++) {
       int16_t xPos = 70 + (timeIdx * timeWidth);
@@ -1517,14 +1526,14 @@ void drawGTT() {
         // Draw time with color based on realtime flag
         uint16_t timeColor = gttStops[stopIdx].realtime ? ST77XX_GREEN : GTT_SCHEDULED_COLOR;
         tft.setTextColor(timeColor);
-        tft.setCursor(xPos, yPos + 15);
+        tft.setCursor(xPos, yPos + 12);
         tft.print(gttStops[stopIdx].hour);
       }
     }
 
     // Thin separator to create a clearer line break between rows.
     if (lineIdx + 1 < GTT_LINES_ON_SCREEN && lineSeedIdx[lineIdx + 1] >= 0) {
-      tft.drawFastHLine(10, yPos + 24, 220, GTT_SEPARATOR_COLOR);
+      tft.drawFastHLine(10, yPos + 22, 220, GTT_SEPARATOR_COLOR);
     }
     yPos += rowHeight;
   }
