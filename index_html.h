@@ -23,9 +23,18 @@ const char INDEX_HTML[] PROGMEM = R"(
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>MeteoClock</title>
     <script>
-        // Detect user's color scheme preference and apply Bootstrap theme
-        const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        document.documentElement.setAttribute('data-bs-theme', theme);
+        // Keep Bootstrap theme in sync with system preference in real time.
+        const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        function applyTheme() {
+            const theme = colorSchemeQuery.matches ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-bs-theme', theme);
+        }
+        applyTheme();
+        if (typeof colorSchemeQuery.addEventListener === 'function') {
+            colorSchemeQuery.addEventListener('change', applyTheme);
+        } else if (typeof colorSchemeQuery.addListener === 'function') {
+            colorSchemeQuery.addListener(applyTheme);
+        }
     </script>
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
@@ -39,10 +48,12 @@ const char INDEX_HTML[] PROGMEM = R"(
             min-height: 100vh;
             font-family: 'Oswald', sans-serif;
             letter-spacing: 0.02em;
+            transition: background-color 0.25s ease, color 0.25s ease;
         }
 
         [data-bs-theme="dark"] body {
-            background: #1a1a2e;
+            background: #131722;
+            color: #e8ebf0;
         }
 
         .card {
@@ -53,8 +64,9 @@ const char INDEX_HTML[] PROGMEM = R"(
         }
 
         [data-bs-theme="dark"] .card {
-            background: rgba(30, 30, 30, 0.8);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(23, 28, 40, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
         }
 
         .card:hover {
@@ -87,8 +99,9 @@ const char INDEX_HTML[] PROGMEM = R"(
         }
 
         [data-bs-theme="dark"] .header {
-            background: rgba(30, 30, 30, 0.8);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(23, 28, 40, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
         }
 
         .header h1 {
@@ -179,9 +192,19 @@ const char INDEX_HTML[] PROGMEM = R"(
             border-radius: 10px;
         }
 
+        [data-bs-theme="dark"] .news-list::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
         .news-list::-webkit-scrollbar-thumb {
             background: rgba(255, 217, 61, 0.5);
             border-radius: 10px;
+        }
+
+        [data-bs-theme="dark"] .text-muted,
+        [data-bs-theme="dark"] .form-text,
+        [data-bs-theme="dark"] .metric-label {
+            color: rgba(232, 235, 240, 0.72) !important;
         }
 
         .news-list a {
