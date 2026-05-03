@@ -1,9 +1,13 @@
-// SmallTV firmware (ESP8266 + ST7789)
-// Versioning:
-// - 2026.03.26: User-friendly error messages on display (detailed errors remain on web)
-// - 2026.03.22: Removed GTT placeholder fallback, direct error propagation on TFT/Web
-// - 2026.03.15: GTT page in PROGMEM, RAM hardening
-// - 2026.03.11: UI and typography refresh
+// =====================================================================
+// File: small-tv-rss.ino
+// Purpose: Main firmware entrypoint (ESP8266 + ST7789)
+// Changelog (latest first):
+//   - 2026.05.03: Header/comment structure normalized (format-only update)
+//   - 2026.03.26: User-friendly error messages on display (detailed errors remain on web)
+//   - 2026.03.22: Removed GTT placeholder fallback, direct error propagation on TFT/Web
+//   - 2026.03.15: GTT page in PROGMEM, RAM hardening
+//   - 2026.03.11: UI and typography refresh
+// =====================================================================
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
@@ -19,7 +23,7 @@
 #include <pgmspace.h>
 #include <string.h>
 
-#include "config.h"
+#include "app_config.h"
 
 // Custom GFX fonts generated from local TTF assets:
 // - Bebas Neue: digital clock only
@@ -30,8 +34,8 @@
 #include "fonts/Oswald/OswaldSemiBold14pt7b.h"
 
 // Web UI HTML pages stored in flash memory
-#include "index_html.h"
-#include "gtt_html.h"
+#include "web_dashboard_html.h"
+#include "gtt_dashboard_html.h"
 
 // Icon assets (stored in flash memory to save RAM):
 #include "icons/wifi/icons_1bit.h"   // WiFi connection animation (32x32, 1-bit monochrome)
@@ -854,7 +858,7 @@ bool ICACHE_FLASH_ATTR syncNTP() {
 // Updates global variables: weatherTemp, weatherHumidity, weatherDesc, lastWeatherUpdateTime
 // Silently fails if WiFi is disconnected or API key is missing
 // Uses HTTP_TIMEOUT_MS and automatic retry logic (HTTP_MAX_RETRIES) for resilience
-// Note: Coordinates are configured in config.h (OWM_LAT, OWM_LON)
+// Note: Coordinates are configured in app_config.h (OWM_LAT, OWM_LON)
 void fetchWeather() {
   // Pre-flight checks
   if (!ensureWiFiConnected(lastWeatherError)) return;

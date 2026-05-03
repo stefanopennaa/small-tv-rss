@@ -1,9 +1,13 @@
 #pragma once
 // =====================================================================
-// GTT Web Page HTML (Stored in Flash Memory)
-// =====================================================================
+// File: gtt_dashboard_html.h
+// Purpose: GTT dashboard HTML/CSS/JS stored in PROGMEM
+// Changelog (latest first):
+//   - 2026.05.03: Header/comment structure normalized (format-only update)
+//
 // This page mirrors the visual style of the main dashboard and loads
 // bus times from /gtt_data.
+// =====================================================================
 
 const char GTT_HTML[] PROGMEM = R"(
 <!DOCTYPE html>

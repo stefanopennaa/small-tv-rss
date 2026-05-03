@@ -1,3 +1,10 @@
+// =====================================================================
+// File: secrets_template.h
+// Purpose: Template for OpenWeatherMap API credentials
+// Changelog (latest first):
+//   - 2026.05.03: Header/comment structure normalized (format-only update)
+// =====================================================================
+
 #pragma once
 
 // =====================================================================

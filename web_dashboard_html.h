@@ -1,9 +1,9 @@
 #pragma once
 // =====================================================================
-// Web Dashboard HTML (Stored in Flash Memory)
-// =====================================================================
-// This file contains the complete HTML/CSS/JavaScript for the device's
-// web interface. The content is stored in PROGMEM to conserve RAM.
+// File: web_dashboard_html.h
+// Purpose: Main dashboard HTML/CSS/JS stored in PROGMEM
+// Changelog (latest first):
+//   - 2026.05.03: Header/comment structure normalized (format-only update)
 //
 // Features:
 // - Responsive Bootstrap 5 design with dark/light mode support

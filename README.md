@@ -1,4 +1,4 @@
-# 📺 SmallTV RSS - ESP8266 Weather + RSS + GTT
+# SmallTV RSS (ESP8266 + ST7789)
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-2026.03.26-blue.svg" alt="Version">
@@ -6,174 +6,113 @@
   <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="License">
 </p>
 
-Smart weather station + RSS news + GTT bus monitor for **GeekMagic SmallTV** with NTP clock, OTA updates, and web dashboard.
+Firmware for **GeekMagic SmallTV** with weather, RSS news, NTP clock, and GTT monitoring, including a web dashboard and OTA updates.
 
-> Amateur project with AI-assisted code. Use at your own risk.
+> Hobby project (AI-assisted), use at your own risk.
 
----
+## Overview
 
-## ✨ Features
+- **Weather** from OpenWeatherMap (temperature, humidity, description).
+- **NTP clock** with Italy timezone (CET/CEST).
+- **ANSA RSS news** with automatic rotation.
+- **GTT (beta)** from 2 configured stops, merged into a 4x2 TFT layout.
+- **Responsive web dashboard** with brightness control.
+- **OTA** via `/update`.
 
-- 🌡️ **Weather**: OpenWeatherMap API with temperature/humidity panel
-- 🕐 **NTP Clock**: Italy timezone (CET/CEST) with large clock display
-- 📰 **RSS Feed**: ANSA top news with automatic rotation
-- 🚌 **GTT** ⚠️ **BETA**: Turin bus stop data (2 fixed stops merged, compact 4×2 display)
-- 🌐 **Web Dashboard**: Bootstrap 5, mobile responsive, brightness control
-- 🔄 **OTA Updates**: Wireless firmware updates via `/update`
-- 🎨 **Custom UI**: Auto scene rotation, custom fonts and icons
+## Requirements
 
----
+- ESP8266 (e.g. D1 mini or compatible)
+- Display ST7789 240x240 (GeekMagic SmallTV)
+- 2.4 GHz WiFi network
+- Arduino libraries: `Adafruit_GFX`, `Adafruit_ST7789`, `ArduinoJson`, `ElegantOTA`
 
-## 🛠️ Requirements
+## Quick start
 
-- **Board**: ESP8266 (D1 mini or compatible)
-- **Display**: ST7789 240x240 TFT (GeekMagic SmallTV)
-- **WiFi**: 2.4GHz network
-- **Libraries**: Adafruit_GFX, Adafruit_ST7789, ArduinoJson, ElegantOTA
+1. Clone the repository.
+   ```bash
+   git clone https://github.com/stefanopennaa/small-tv-rss.git
+   cd small-tv-rss
+   ```
+2. Configure WiFi/OTA credentials.
+   ```bash
+   cp wifi_secrets_template.h wifi_secrets.h
+   ```
+3. Configure the weather API key.
+   ```bash
+   cp secrets_template.h secrets.h
+   ```
+4. (Optional) Customize coordinates and stop URLs in `app_config.h`.
+5. Open `small-tv-rss.ino` in Arduino IDE, select board/port, and upload the firmware.
 
----
-
-## 🚀 Quick Setup
-
-**1. Clone repository:**
-```bash
-git clone https://github.com/stefanopennaa/SmallTV_RSS.git
-cd SmallTV_RSS
-```
-
-**2. Configure WiFi:**
-```bash
-cp wifi_secrets.example.h wifi_secrets.h
-# Edit wifi_secrets.h: set WIFI_SSID, WIFI_PASSWORD, OTA_USERNAME, OTA_PASSWORD
-```
-
-**3. Configure API key:**
-```bash
-cp secrets.example.h secrets.h
-# Edit secrets.h: set OWM_API_KEY (get it from openweathermap.org)
-```
-
-**4. (Optional) Customize location/feeds in `config.h`:**
-```cpp
-constexpr char OWM_LAT[] = "45.0703";  // Your latitude
-constexpr char OWM_LON[] = "7.6869";   // Your longitude
-constexpr char GTT_STOP_URL_1[] = "https://gpa.madbob.org/query.php?stop=3445";  // First bus stop ID
-constexpr char GTT_STOP_URL_2[] = "https://gpa.madbob.org/query.php?stop=3742";  // Second bus stop ID
-```
-
-**5. Upload:**
-- Open `SmallTV_RSS.ino` in Arduino IDE
-- Select ESP8266 board and port
-- Upload and visit `http://DEVICE_IP`
-
----
-
-## 🌐 Web Endpoints
+## Web endpoints
 
 | Endpoint | Description |
-|----------|-------------|
+| --- | --- |
 | `/` | Main dashboard |
-| `/gtt` | GTT bus stops page |
-| `/api` | JSON status (weather, device info) |
-| `/news` | JSON news feed + debug info |
-| `/gtt_data` | JSON GTT data + debug info |
-| `/brightness?value=N` | Set backlight (0-255) |
-| `/update` | OTA firmware update |
+| `/gtt` | GTT page |
+| `/api` | Device status JSON |
+| `/news` | News feed + debug JSON |
+| `/gtt_data` | GTT data + debug JSON |
+| `/brightness?value=N` | Display brightness (0-255) |
+| `/update` | OTA page |
 
----
+## Main configuration (`app_config.h`)
 
-## ⚙️ Configuration
+- Update intervals: `OWM_INTERVAL_MS`, `NEWS_INTERVAL_MS`, `GTT_INTERVAL_MS`
+- Scene durations: `DISPLAY_CLOCK_MS`, `DISPLAY_NEWS_MS`, `DISPLAY_GTT_MS`
+- RGB565 color theme: `BG_COLOR`, `TEMP_COLOR`, `HUM_COLOR`, etc.
+- Payload safety limits: `RSS_MAX_RESPONSE_SIZE`, `WEATHER_MAX_RESPONSE_SIZE`, `GTT_MAX_RESPONSE_SIZE`
 
-Edit `config.h` for:
-- **Update intervals**: `OWM_INTERVAL_MS`, `NEWS_INTERVAL_MS`, `GTT_INTERVAL_MS`
-- **Display durations**: `DISPLAY_CLOCK_MS`, `DISPLAY_NEWS_MS`, `DISPLAY_GTT_MS`
-- **Colors**: `BG_COLOR`, `TEMP_COLOR`, etc. (RGB565)
-- **Safety limits**: `RSS_MAX_RESPONSE_SIZE`, `WEATHER_MAX_RESPONSE_SIZE`
+## Known limitations
 
----
+- **GTT**: supports 2 fixed stops (`GTT_STOP_URL_1`, `GTT_STOP_URL_2`), no dynamic stop selection.
+- **GTT TFT layout**: up to 4 lines, 2 departure times per line.
+- **UI error handling**: simplified messages on display/web; details in browser debug and JSON endpoints.
 
-## ⚠️ Known Limitations
+## Quick troubleshooting
 
-**GTT Feed (BETA):**
-- Supports **2 fixed stops** (`GTT_STOP_URL_1`, `GTT_STOP_URL_2`) merged into one list
-- TFT layout is fixed to **4 lines × 2 times per line**
-- No nearby stops discovery or web UI selector
-- Future: dynamic stop selection, favorites, countdown timers
+| Problem | Check |
+| --- | --- |
+| WiFi not connected | `wifi_secrets.h`, 2.4 GHz network |
+| Missing weather data | `OWM_API_KEY` in `secrets.h` |
+| Clock shows `--:--` | Wait for NTP sync with internet access |
+| Empty GTT data | Stop URLs and internet connectivity |
+| Brightness unchanged | Use `/brightness?value=128` (0-255) |
 
-**Error Display:**
-- Display shows user-friendly messages ("Dati non disponibili", "News non disponibili")
-- GTT error screen shows for 5 seconds only
-- Web interface shows simplified messages, errors logged to browser console
+## Changelog
 
----
+### 2026.05.03
+- Formal cleanup of source file headers/comments.
+- README rewritten and presentation normalized.
 
-## 🔧 Troubleshooting
+### 2026.03.27
+- GTT layout updated to 4 lines, 2 times per line.
+- `OswaldSemiBold10pt7b` integrated for clearer line numbers.
 
-| Issue | Solution |
-|-------|----------|
-| No WiFi | Check `wifi_secrets.h`, verify 2.4GHz network |
-| No weather | Verify `OWM_API_KEY` in `secrets.h` |
-| Clock shows `--:--` | Wait for NTP sync (requires internet) |
-| GTT not working | Check `GTT_STOP_URL_1`, `GTT_STOP_URL_2` and internet connection |
-| Brightness not changing | Use `/brightness?value=128` (0-255) |
+### 2026.03.26
+- User-friendly error messages on display (news/GTT).
+- GTT error screen duration reduced to 5 seconds.
 
----
+### 2026.03.22
+- Removed GTT placeholders.
+- Direct error propagation to web interface.
 
-## 📝 Changelog
+### 2026.03.15
+- First GTT page integration.
+- RAM optimization and hardening.
 
-### v2026.03.27 - GTT Layout Refresh
-- GTT scene now shows up to **4 bus lines** (instead of 3)
-- Each line now shows up to **2 departure times** (instead of 3) to avoid wrapping
-- Added and integrated `OswaldSemiBold10pt7b` for clearer line numbers
-- README and inline comments aligned with current GTT behavior
+## Security
 
-### v2026.03.26 - Display Error Messages
-- Display shows user-friendly error messages: "Dati non disponibili" (GTT), "News non disponibili" (News)
-- GTT error screen duration reduced to 5 seconds (from 15s)
-- Web interface shows simplified "Dati non disponibili" message
-- Technical errors logged to browser console for debugging
+- Secrets kept outside the repository (`wifi_secrets.h`, `secrets.h`).
+- Endpoint input validation.
+- Network timeouts and response size limits.
+- No application-level authentication: use trusted networks.
 
-### v2026.03.22 - GTT Error Visibility
-- Removed placeholder GTT stops
-- Direct error propagation to web interface
+## License
 
-### v2026.03.15 - GTT Integration
-- Added GTT web page
-- RAM optimization and hardening
+MIT, see [LICENSE](LICENSE).
 
----
+## Support
 
-## 🔐 Security
-
-**Implemented:**
-- Input validation on endpoints
-- Network timeouts and response size limits
-- Secrets separated from repository
-
-**Limitations:**
-- No authentication (LAN use only)
-- Credentials in plaintext on device
-- Use on trusted networks only
-
----
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE)
-
----
-
-## 🙏 Credits
-
-- **Libraries**: Adafruit, ArduinoJson, ElegantOTA, Bootstrap
-- **Data**: OpenWeatherMap, ANSA RSS, GTT, NTP
-- **Hardware**: GeekMagic SmallTV
-
----
-
-## 📧 Support
-
-- **Issues**: [GitHub Issues](https://github.com/stefanopennaa/SmallTV_RSS/issues)
-- **Email**: stefano@stefanopenna.it
-
-<p align="center">Built for ESP8266 tinkerers and tiny displays.</p>
+- Issue tracker: [GitHub Issues](https://github.com/stefanopennaa/SmallTV_RSS/issues)
+- Email: stefano@stefanopenna.it
