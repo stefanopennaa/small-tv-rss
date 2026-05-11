@@ -176,6 +176,11 @@ constexpr unsigned long INITIAL_DATA_FETCH_DELAY_MS = 1200;  // Delay before fir
 // HTTP Request Timeouts
 constexpr uint16_t HTTP_TIMEOUT_MS = 3500;  // Standard HTTP request timeout (3.5 sec) for all data fetches
 
+// Daily Internet Health Check
+// Proactive check to detect "WiFi connected but internet unavailable" states
+constexpr unsigned long INTERNET_HEALTHCHECK_INTERVAL_MS = 86400000UL;  // Run full internet check every 24 hours
+constexpr char INTERNET_HEALTHCHECK_URL[] = "https://connectivitycheck.gstatic.com/generate_204";
+
 // Request Retry Logic
 // Both weather and RSS can fail due to transient network issues - retry automatically
 constexpr uint8_t HTTP_MAX_RETRIES = 2;      // Number of total attempts (initial + retries)

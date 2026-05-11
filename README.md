@@ -1,7 +1,7 @@
 # SmallTV RSS (ESP8266 + ST7789)
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2026.05.03-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-2026.05.11-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/platform-ESP8266-green.svg" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="License">
 </p>
@@ -18,6 +18,7 @@ Firmware for **GeekMagic SmallTV** with weather, RSS news, NTP clock, and GTT mo
 - **GTT (beta)** from 2 configured stops, merged into a 4x2 TFT layout.
 - **Responsive web dashboard** with brightness control.
 - **OTA** via `/update`.
+- **WiFi resiliency** with timeout-based reconnect and daily end-to-end internet health-check.
 
 ## Requirements
 
@@ -59,6 +60,7 @@ Firmware for **GeekMagic SmallTV** with weather, RSS news, NTP clock, and GTT mo
 ## Main configuration (`app_config.h`)
 
 - Update intervals: `OWM_INTERVAL_MS`, `NEWS_INTERVAL_MS`, `GTT_INTERVAL_MS`
+- Connectivity recovery: `WIFI_CONNECT_TIMEOUT_MS`, `WIFI_RETRY_INTERVAL_MS`, `INTERNET_HEALTHCHECK_INTERVAL_MS`
 - Scene durations: `DISPLAY_CLOCK_MS`, `DISPLAY_NEWS_MS`, `DISPLAY_GTT_MS`
 - RGB565 color theme: `BG_COLOR`, `TEMP_COLOR`, `HUM_COLOR`, etc.
 - Payload safety limits: `RSS_MAX_RESPONSE_SIZE`, `WEATHER_MAX_RESPONSE_SIZE`, `GTT_MAX_RESPONSE_SIZE`
@@ -80,6 +82,10 @@ Firmware for **GeekMagic SmallTV** with weather, RSS news, NTP clock, and GTT mo
 | Brightness unchanged | Use `/brightness?value=128` (0-255) |
 
 ## Changelog
+
+### 2026.05.11
+- Added daily end-to-end internet health-check (`INTERNET_HEALTHCHECK_URL`) every 24h.
+- If health-check fails, firmware now forces WiFi reconnect and repeats NTP/data recovery flow.
 
 ### 2026.05.03
 - Formal cleanup of source file headers/comments.

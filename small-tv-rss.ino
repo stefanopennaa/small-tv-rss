@@ -2,6 +2,7 @@
 // File: small-tv-rss.ino
 // Purpose: Main firmware entrypoint (ESP8266 + ST7789)
 // Changelog (latest first):
+//   - 2026.05.11: Added daily full internet health-check with automatic reconnect flow
 //   - 2026.05.03: Header/comment structure normalized (format-only update)
 //   - 2026.03.26: User-friendly error messages on display (detailed errors remain on web)
 //   - 2026.03.22: Removed GTT placeholder fallback, direct error propagation on TFT/Web
@@ -83,7 +84,7 @@
 // Hardware instances
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);  // ST7789 240x240 TFT display driver
 ESP8266WebServer server(80);                                     // HTTP server on port 80
-constexpr const char* FW_VERSION = "2026.03.26";
+constexpr const char* FW_VERSION = "2026.05.11";
 
 // UI Text Strings Structure
 // Centralizes all user-visible text to simplify localization and reduce string literals in code
@@ -143,8 +144,11 @@ bool otaInProgress = false;                                     // True during O
 unsigned long bootMs = 0;                                       // Timestamp when device booted
 
 // ===== NETWORK RETRY TIMERS =====
-unsigned long lastWiFiRetry = 0;  // Last WiFi reconnection attempt
-unsigned long lastNtpRetry = 0;   // Last NTP sync retry
+unsigned long lastWiFiRetry = 0;      // Last WiFi reconnection attempt
+unsigned long lastNtpRetry = 0;       // Last NTP sync retry
+unsigned long lastInternetCheck = 0;  // Last full internet health-check attempt
+bool lastInternetCheckOk = true;      // Result of the latest internet health-check
+int lastInternetCheckHttpCode = 0;    // HTTP code from latest internet health-check
 
 // ===== WEATHER DATA (OpenWeatherMap API) =====
 float weatherTemp = 0;                    // Temperature in Celsius
@@ -226,11 +230,20 @@ constexpr uint16_t GTT_SEPARATOR_COLOR = 0x39E7;  // Light grey
 // Utility Helper Functions
 // =====================================================================
 
+void showStatusCentered(const String& msg,
+                        uint16_t color = ST77XX_WHITE,
+                        int16_t y = STATUS_TEXT_CENTER_Y);
+
 // isWiFiConnected()
 // Quick check for WiFi connectivity status
 // Returns: true if WiFi is connected, false otherwise
 bool isWiFiConnected() {
-  return WiFi.status() == WL_CONNECTED;
+  if (WiFi.status() == WL_CONNECTED || WiFi.isConnected()) {
+    return true;
+  }
+
+  const IPAddress ip = WiFi.localIP();
+  return ip[0] != 0 || ip[1] != 0 || ip[2] != 0 || ip[3] != 0;
 }
 
 // ensureWiFiConnected()
@@ -366,6 +379,22 @@ void fetchAllData() {
   fetchGTT(nullptr);  // URL parameter now ignored, using GTT_STOP_URL_1 and GTT_STOP_URL_2
 }
 
+// Refreshes runtime data/UI after internet connectivity is restored.
+void refreshAfterInternetRecovery(unsigned long now) {
+  showStatusCentered("Fetching data...", ST77XX_WHITE);
+  fetchAllData();
+  lastWeatherFetchTime = now;
+  lastNewsFetchTime = now;
+  lastGttFetchTime = now;
+
+  currentScene = DisplayScene::SCENE_CLOCK;
+  currentNewsIndex = 0;
+  lastDisplay = now;
+  renderClockScene(true);
+  refreshClockTracking(now);
+  offlineScreenShown = false;
+}
+
 // =====================================================================
 // Display Helper Functions
 // =====================================================================
@@ -472,8 +501,8 @@ void drawTextCenteredX(int16_t areaX, int16_t areaY, int16_t areaW, const String
 // showStatusCentered()
 // Convenience wrapper around showStatus() for centered boot/status messages.
 void showStatusCentered(const String& msg,
-                        uint16_t color = ST77XX_WHITE,
-                        int16_t y = STATUS_TEXT_CENTER_Y) {
+                        uint16_t color,
+                        int16_t y) {
   int16_t x1, y1;
   uint16_t w, h;
   tft.setFont(&Oswald_Regular10pt7b);
@@ -709,6 +738,31 @@ void setBrightness(int value) {
 // Network Connection Functions
 // =====================================================================
 
+// Performs an end-to-end internet check (DNS + TLS + HTTP) to detect
+// situations where WiFi is up but internet access is not available.
+bool checkInternetHealth(int& httpCode) {
+  httpCode = 0;
+  if (!isWiFiConnected()) {
+    return false;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  if (!http.begin(client, INTERNET_HEALTHCHECK_URL)) {
+    return false;
+  }
+  http.setTimeout(HTTP_TIMEOUT_MS);
+
+  httpCode = http.sendRequest("HEAD");
+  if (httpCode == 405) {
+    httpCode = http.GET();
+  }
+
+  http.end();
+  return httpCode >= 200 && httpCode < 400;
+}
+
 // connectWiFi()
 // Attempts to connect to WiFi network with animated visual feedback
 // Displays connection status and animates WiFi icon during connection attempt
@@ -728,12 +782,14 @@ WiFiConnectResult ICACHE_FLASH_ATTR connectWiFi() {
   WiFi.setAutoConnect(true);
   WiFi.setAutoReconnect(true);
   WiFi.mode(WIFI_STA);
+  WiFi.disconnect(false);  // Reset stale station state before reconnect attempt.
+  delay(50);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   tft.drawBitmap(WIFI_ICON_X, WIFI_ICON_Y, WIFI, WIFI_W, WIFI_H, ST77XX_WHITE, BG_COLOR);
   unsigned long start = millis();
   unsigned long lastStep = millis();
   uint8_t frameIndex = 0;
-  while (WiFi.status() != WL_CONNECTED && (millis() - start) < WIFI_CONNECT_TIMEOUT_MS) {
+  while (!isWiFiConnected() && (millis() - start) < WIFI_CONNECT_TIMEOUT_MS) {
     if (millis() - lastStep < ANIMATION_FRAME_INTERVAL_MS) {
       delay(1);
       continue;
@@ -757,7 +813,7 @@ WiFiConnectResult ICACHE_FLASH_ATTR connectWiFi() {
     frameIndex = (frameIndex + 1) & 0x03;
   }
 
-  const bool connected = (WiFi.status() == WL_CONNECTED);
+  const bool connected = isWiFiConnected();
   if (connected) {
     showStatusCentered(UI.connected, ST77XX_GREEN);
     delay(WIFI_CONNECTED_DELAY_MS);
@@ -767,6 +823,7 @@ WiFiConnectResult ICACHE_FLASH_ATTR connectWiFi() {
   } else {
     showStatusCentered(UI.wifiTimeout, ST77XX_YELLOW);
     delay(WIFI_STATUS_DELAY_MS);
+    WiFi.disconnect(false);  // Force a clean state for next retry cycle.
     lastWiFiResult = WiFiConnectResult::Timeout;
   }
 
@@ -1683,6 +1740,36 @@ void tickNtpRetry(unsigned long now) {
   }
 }
 
+// tickDailyInternetCheck()
+// Performs a full internet health-check once per day.
+// If the check fails, it forces a WiFi reconnect and re-sync flow.
+void tickDailyInternetCheck(unsigned long now) {
+  if (!isWiFiConnected()) return;
+  if (now - lastInternetCheck < INTERNET_HEALTHCHECK_INTERVAL_MS) return;
+
+  lastInternetCheck = now;
+
+  int httpCode = 0;
+  const bool internetOk = checkInternetHealth(httpCode);
+  lastInternetCheckHttpCode = httpCode;
+  lastInternetCheckOk = internetOk;
+  if (internetOk) return;
+
+  WiFi.disconnect(false);
+  delay(50);
+  WiFiConnectResult result = connectWiFi();
+  if (result != WiFiConnectResult::Connected) {
+    bootState = BootState::BOOT_DEGRADED;
+    ntpSynced = false;
+    return;
+  }
+
+  bootState = BootState::BOOT_NTP;
+  ntpSynced = syncNTP();
+  bootState = ntpSynced ? BootState::BOOT_READY : BootState::BOOT_DEGRADED;
+  refreshAfterInternetRecovery(now);
+}
+
 // tickInitialDataFetch()
 // Retry mechanism: if initial fetch in setup() failed, retries periodically
 // Exits immediately once both weather AND news data are successfully fetched
@@ -1853,6 +1940,7 @@ void setup() {
   lastWeatherFetchTime = millis();
   lastNewsFetchTime = millis();
   lastDisplay = millis();
+  lastInternetCheck = millis();
 
   // GET / -> dashboard HTML (PROGMEM)
   server.on(
@@ -1971,22 +2059,12 @@ void loop() {
 
   if (offlineScreenShown) {
     // Network restored: refresh data immediately.
-    showStatusCentered("Fetching data...", ST77XX_WHITE);
-    fetchAllData();
-    lastWeatherFetchTime = now;
-    lastNewsFetchTime = now;
-    lastGttFetchTime = now;
-
-    currentScene = DisplayScene::SCENE_CLOCK;
-    currentNewsIndex = 0;
-    lastDisplay = now;
-    renderClockScene(true);
-    refreshClockTracking(now);
-    offlineScreenShown = false;
+    refreshAfterInternetRecovery(now);
   }
 
   tickWiFiRetry(now);
   tickNtpRetry(now);
+  tickDailyInternetCheck(now);
   tickInitialDataFetch(now);
   tickWeather(now);
   tickNews(now);
