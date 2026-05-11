@@ -176,9 +176,11 @@ constexpr unsigned long INITIAL_DATA_FETCH_DELAY_MS = 1200;  // Delay before fir
 // HTTP Request Timeouts
 constexpr uint16_t HTTP_TIMEOUT_MS = 3500;  // Standard HTTP request timeout (3.5 sec) for all data fetches
 
-// Daily Internet Health Check
-// Proactive check to detect "WiFi connected but internet unavailable" states
-constexpr unsigned long INTERNET_HEALTHCHECK_INTERVAL_MS = 86400000UL;  // Run full internet check every 24 hours
+// Periodic Internet Health Check
+// Proactive checks to detect "WiFi connected but internet unavailable" states.
+constexpr unsigned long INTERNET_HEALTHCHECK_INTERVAL_MS = 300000UL;  // Run full internet check every 5 minutes
+constexpr uint8_t INTERNET_HEALTHCHECK_FAILURE_THRESHOLD = 2;         // Consecutive failures before forced recovery
+constexpr unsigned long INTERNET_RECOVERY_COOLDOWN_MS = 60000UL;      // Minimum delay between forced recoveries
 constexpr char INTERNET_HEALTHCHECK_URL[] = "https://connectivitycheck.gstatic.com/generate_204";
 
 // Request Retry Logic

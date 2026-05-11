@@ -2,7 +2,7 @@
 // File: small-tv-rss.ino
 // Purpose: Main firmware entrypoint (ESP8266 + ST7789)
 // Changelog (latest first):
-//   - 2026.05.11: Added daily full internet health-check with automatic reconnect flow
+//   - 2026.05.11: Added periodic internet health-check with threshold-based recovery flow
 //   - 2026.05.03: Header/comment structure normalized (format-only update)
 //   - 2026.03.26: User-friendly error messages on display (detailed errors remain on web)
 //   - 2026.03.22: Removed GTT placeholder fallback, direct error propagation on TFT/Web
@@ -144,11 +144,13 @@ bool otaInProgress = false;                                     // True during O
 unsigned long bootMs = 0;                                       // Timestamp when device booted
 
 // ===== NETWORK RETRY TIMERS =====
-unsigned long lastWiFiRetry = 0;      // Last WiFi reconnection attempt
-unsigned long lastNtpRetry = 0;       // Last NTP sync retry
-unsigned long lastInternetCheck = 0;  // Last full internet health-check attempt
-bool lastInternetCheckOk = true;      // Result of the latest internet health-check
-int lastInternetCheckHttpCode = 0;    // HTTP code from latest internet health-check
+unsigned long lastWiFiRetry = 0;                // Last WiFi reconnection attempt
+unsigned long lastNtpRetry = 0;                 // Last NTP sync retry
+unsigned long lastInternetCheck = 0;            // Last full internet health-check attempt
+bool lastInternetCheckOk = true;                // Result of the latest internet health-check
+int lastInternetCheckHttpCode = 0;              // HTTP code from latest internet health-check
+uint8_t internetCheckFailures = 0;              // Consecutive failed internet health-checks
+unsigned long lastInternetRecoveryAttempt = 0;  // Last forced reconnect/recovery attempt
 
 // ===== WEATHER DATA (OpenWeatherMap API) =====
 float weatherTemp = 0;                    // Temperature in Celsius
@@ -238,12 +240,11 @@ void showStatusCentered(const String& msg,
 // Quick check for WiFi connectivity status
 // Returns: true if WiFi is connected, false otherwise
 bool isWiFiConnected() {
-  if (WiFi.status() == WL_CONNECTED || WiFi.isConnected()) {
-    return true;
+  if (WiFi.status() != WL_CONNECTED || !WiFi.isConnected()) {
+    return false;
   }
-
   const IPAddress ip = WiFi.localIP();
-  return ip[0] != 0 || ip[1] != 0 || ip[2] != 0 || ip[3] != 0;
+  return ip != INADDR_NONE && ip != INADDR_ANY;
 }
 
 // ensureWiFiConnected()
@@ -845,10 +846,11 @@ bool ICACHE_FLASH_ATTR syncNTP() {
 
   showStatusCentered(UI.ntpSync, ST77XX_WHITE);
 
-  // Configure NTP servers and Italy timezone (CET-1CEST with DST)
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-  setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+  // Configure Italy timezone (CET/CEST with DST) before starting NTP sync.
+  // DST changeovers: last Sunday in March at 02:00, last Sunday in October at 03:00.
+  setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/3", 1);
   tzset();
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
   const unsigned long MIN_SYNC_MS = NTP_MIN_SYNC_ANIM_MS;
   unsigned long syncStart = millis();
@@ -1686,6 +1688,7 @@ void onOTAProgress(size_t current, size_t total) {
 // Parameters:
 //   success - true if update succeeded, false if it failed
 void onOTAEnd(bool success) {
+  otaInProgress = false;
   if (success) {
     showStatus(UI.updated, ST77XX_GREEN);
   } else {
@@ -1712,6 +1715,10 @@ void tickWiFiRetry(unsigned long now) {
   WiFiConnectResult result = connectWiFi();
   if (result == WiFiConnectResult::Connected) {
     bootState = ntpSynced ? BootState::BOOT_READY : BootState::BOOT_NTP;
+    internetCheckFailures = 0;
+    lastInternetCheck = now;
+    lastInternetCheckOk = true;
+    lastInternetCheckHttpCode = 0;
   } else {
     bootState = BootState::BOOT_DEGRADED;
     ntpSynced = false;
@@ -1740,10 +1747,11 @@ void tickNtpRetry(unsigned long now) {
   }
 }
 
-// tickDailyInternetCheck()
-// Performs a full internet health-check once per day.
-// If the check fails, it forces a WiFi reconnect and re-sync flow.
-void tickDailyInternetCheck(unsigned long now) {
+// tickInternetHealth()
+// Performs periodic internet health-checks while WiFi is connected.
+// To avoid unnecessary reconnect churn, forced recovery is triggered only
+// after INTERNET_HEALTHCHECK_FAILURE_THRESHOLD consecutive failures.
+void tickInternetHealth(unsigned long now) {
   if (!isWiFiConnected()) return;
   if (now - lastInternetCheck < INTERNET_HEALTHCHECK_INTERVAL_MS) return;
 
@@ -1753,8 +1761,22 @@ void tickDailyInternetCheck(unsigned long now) {
   const bool internetOk = checkInternetHealth(httpCode);
   lastInternetCheckHttpCode = httpCode;
   lastInternetCheckOk = internetOk;
-  if (internetOk) return;
+  if (internetOk) {
+    internetCheckFailures = 0;
+    return;
+  }
 
+  if (internetCheckFailures < 0xFF) {
+    internetCheckFailures++;
+  }
+  if (internetCheckFailures < INTERNET_HEALTHCHECK_FAILURE_THRESHOLD) {
+    return;
+  }
+  if (now - lastInternetRecoveryAttempt < INTERNET_RECOVERY_COOLDOWN_MS) {
+    return;
+  }
+
+  lastInternetRecoveryAttempt = now;
   WiFi.disconnect(false);
   delay(50);
   WiFiConnectResult result = connectWiFi();
@@ -1767,6 +1789,9 @@ void tickDailyInternetCheck(unsigned long now) {
   bootState = BootState::BOOT_NTP;
   ntpSynced = syncNTP();
   bootState = ntpSynced ? BootState::BOOT_READY : BootState::BOOT_DEGRADED;
+  internetCheckFailures = 0;
+  lastInternetCheckOk = true;
+  lastInternetCheckHttpCode = 0;
   refreshAfterInternetRecovery(now);
 }
 
@@ -2064,7 +2089,7 @@ void loop() {
 
   tickWiFiRetry(now);
   tickNtpRetry(now);
-  tickDailyInternetCheck(now);
+  tickInternetHealth(now);
   tickInitialDataFetch(now);
   tickWeather(now);
   tickNews(now);
