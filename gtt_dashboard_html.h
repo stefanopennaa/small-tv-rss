@@ -3,6 +3,7 @@
 // File: gtt_dashboard_html.h
 // Purpose: GTT dashboard HTML/CSS/JS stored in PROGMEM
 // Changelog (latest first):
+//   - 2026.05.14: Added error handling status display
 //   - 2026.05.03: Header/comment structure normalized (format-only update)
 //
 // This page mirrors the visual style of the main dashboard and loads

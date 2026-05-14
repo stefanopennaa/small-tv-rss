@@ -3,11 +3,14 @@
 // File: web_dashboard_html.h
 // Purpose: Main dashboard HTML/CSS/JS stored in PROGMEM
 // Changelog (latest first):
+//   - 2026.05.14: tickWiFiRetry fixed — forced reconnect now triggers when bootState == BOOT_WIFI even if WiFi appears connected (internet-only outage recovery).
+//   - 2026.05.14: tickWiFiRetry now calls refreshAfterInternetRecovery directly after internet recovery, without depending on offlineScreenShown flag.
+//   - 2026.05.14: Updated to use 'online' flag from /api, improved fetch timeout handling
 //   - 2026.05.03: Header/comment structure normalized (format-only update)
 //
 // Features:
 // - Responsive Bootstrap 5 design with dark/light mode support
-// - Real-time weather and device status display
+// - Real-time weather and device status display with accurate online detection
 // - Brightness control slider
 // - RSS news feed viewer
 // - Firmware update link (via ElegantOTA)
@@ -405,11 +408,11 @@ const char INDEX_HTML[] PROGMEM = R"(
         // Configuration Constants
         // =====================================================
         const CONFIG = {
-            FETCH_TIMEOUT_MS: 5000,
+            FETCH_TIMEOUT_MS: 8000,
             FETCH_MAX_RETRIES: 3,
             AUTO_REFRESH_INTERVAL_MS: 60000,
-            BRIGHTNESS_DEBOUNCE_MS: 300,
-            FEEDBACK_DURATION_MS: 2000
+            BRIGHTNESS_DEBOUNCE_MS: 500,
+            FEEDBACK_DURATION_MS: 1500
         };
 
         // =====================================================
@@ -571,12 +574,13 @@ const char INDEX_HTML[] PROGMEM = R"(
                 UI.slider.setAttribute('aria-valuenow', data.brightness || 0);
                 UI.slider.setAttribute('aria-valuetext', `${percentage} percento`);
 
-                // Update connection status badge
-                setStatusBadge(true);
+                // Update connection status badge based on device's reported state (not just fetch success)
+                setStatusBadge(data.online === true);
                 updateTimestamp();
                 
             } catch (err) {
                 console.error('Error fetching device data:', err);
+                // Only mark offline on fetch failure - device may have lost connectivity
                 setStatusBadge(false);
             }
         };

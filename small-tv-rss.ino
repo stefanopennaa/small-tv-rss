@@ -2,6 +2,7 @@
 // File: small-tv-rss.ino
 // Purpose: Main firmware entrypoint (ESP8266 + ST7789)
 // Changelog (latest first):
+//   - 2026.05.14: Critical fixes - race condition in loop, badge false positives, non-blocking recovery
 //   - 2026.05.11: Added periodic internet health-check with threshold-based recovery flow
 //   - 2026.05.03: Header/comment structure normalized (format-only update)
 //   - 2026.03.26: User-friendly error messages on display (detailed errors remain on web)
@@ -621,39 +622,61 @@ void appendGttStopJson(String& json, const String& line, const String& hour, boo
 }
 
 String buildApiJsonPayload() {
-  const String escapedDesc = jsonEscape(weatherDesc);
+  // Truncate description to prevent buffer overflow
+  const String truncatedDesc = weatherDesc.substring(0, 64);
+  const String escapedDesc = jsonEscape(truncatedDesc);
+
   char tempText[12];
   snprintf(tempText, sizeof(tempText), "%.1f", weatherTemp);
 
+  // Safely get IP address with validation
+  String ipStr = WiFi.localIP().toString();
+  // Verify IP is not INADDR_ANY or INADDR_NONE
+  if (ipStr == "0.0.0.0") {
+    ipStr = "--";
+  }
+  if (ipStr.length() > 20) {
+    ipStr = ipStr.substring(0, 20);
+  }
+
   // Keep /api minimal: only fields used by the main dashboard.
   String json;
-  json.reserve(180);
-  json += "{\"temp\":";
+  json.reserve(300);
+  json += "{\"online\":";
+  json += isWiFiConnected() ? "true" : "false";
+  json += ",\"temp\":";
   json += tempText;
   json += ",\"humidity\":";
   json += String(weatherHumidity);
   json += ",\"description\":\"";
   json += escapedDesc;
   json += "\",\"ip\":\"";
-  json += WiFi.localIP().toString();
+  json += ipStr;
   json += "\",\"brightness\":";
   json += String(currentBrightness);
+  json += ",\"ts\":";
+  json += String(millis() / 1000);  // Timestamp in seconds for data freshness check
   json += "}";
   return json;
 }
 
 String buildNewsJsonPayload() {
   String json;
-  json.reserve(512);
+  json.reserve(1024);
   json += "{\"source\":\"ANSA\",\"items\":[";
   for (int i = 0; i < lastNewsCount; i++) {
     if (i > 0) {
       json += ",";
     }
+
+    // Truncate titles and links to prevent buffer overflow
+    String title = newsTitles[i].substring(0, 200);
+    String link = newsLinks[i].substring(0, 300);
+
     json += "{\"title\":\"";
-    json += jsonEscape(newsTitles[i]);
+    json += jsonEscape(title);
     json += "\",\"link\":\"";
-    json += jsonEscape(newsLinks[i]);
+    json += jsonEscape(link);
     json += "\"}";
   }
   json += "],\"debug\":{";
@@ -662,7 +685,7 @@ String buildNewsJsonPayload() {
   json += ",\"count\":";
   json += String(lastNewsCount);
   json += ",\"error\":\"";
-  json += jsonEscape(lastNewsError);
+  json += jsonEscape(lastNewsError.substring(0, 100));
   json += "\",\"age_ms\":";
   json += String(millis() - lastNewsFetchTime);
   json += "}}";
@@ -671,21 +694,25 @@ String buildNewsJsonPayload() {
 
 String buildGttJsonPayload() {
   String json;
-  json.reserve(512);
+  json.reserve(1024);
   json += "{\"source\":\"GTT\",\"stops\":[";
 
   for (int i = 0; i < lastGttCount; i++) {
     if (i > 0) {
       json += ",";
     }
-    appendGttStopJson(json, gttStops[i].line, gttStops[i].hour, gttStops[i].realtime);
+
+    // Truncate strings to prevent buffer overflow
+    String line = gttStops[i].line.substring(0, 10);
+    String hour = gttStops[i].hour.substring(0, 10);
+    appendGttStopJson(json, line, hour, gttStops[i].realtime);
   }
 
   json += "],\"debug\":{";
   json += "\"count\":";
   json += String(lastGttCount);
   json += ",\"error\":\"";
-  json += jsonEscape(lastGttError);
+  json += jsonEscape(lastGttError.substring(0, 100));
   json += "\",\"age_ms\":";
   json += String(millis() - lastGttFetchTime);
   json += "}}";
@@ -846,11 +873,12 @@ bool ICACHE_FLASH_ATTR syncNTP() {
 
   showStatusCentered(UI.ntpSync, ST77XX_WHITE);
 
-  // Configure Italy timezone (CET/CEST with DST) before starting NTP sync.
+  // Configure NTP servers then set Italy timezone (CET/CEST with DST).
+  // Call configTime first because it may affect timezone settings on this platform.
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   // DST changeovers: last Sunday in March at 02:00, last Sunday in October at 03:00.
   setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/3", 1);
   tzset();
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
   const unsigned long MIN_SYNC_MS = NTP_MIN_SYNC_ANIM_MS;
   unsigned long syncStart = millis();
@@ -1708,7 +1736,10 @@ void onOTAEnd(bool success) {
 // Updates boot state based on reconnection result
 // Allows device to recover automatically from temporary network outages
 void tickWiFiRetry(unsigned long now) {
-  if (isWiFiConnected()) return;
+
+  // Forza reconnect anche se WiFi è "connesso" ma bootState segnala recovery necessaria
+  const bool needsRecovery = (bootState == BootState::BOOT_WIFI);
+  if (isWiFiConnected() && !needsRecovery) return;
   if (now - lastWiFiRetry < WIFI_RETRY_INTERVAL_MS) return;
 
   lastWiFiRetry = now;
@@ -1776,23 +1807,12 @@ void tickInternetHealth(unsigned long now) {
     return;
   }
 
+  // Schedule recovery in next call to avoid blocking the main loop.
+  // Recovery (WiFi reconnect) requires blocking operations (connectWiFi) which
+  // would cause the web server to become unresponsive during recovery.
+  // We signal the recovery intent via boot state, then reconnect on next tick cycle.
   lastInternetRecoveryAttempt = now;
-  WiFi.disconnect(false);
-  delay(50);
-  WiFiConnectResult result = connectWiFi();
-  if (result != WiFiConnectResult::Connected) {
-    bootState = BootState::BOOT_DEGRADED;
-    ntpSynced = false;
-    return;
-  }
-
-  bootState = BootState::BOOT_NTP;
-  ntpSynced = syncNTP();
-  bootState = ntpSynced ? BootState::BOOT_READY : BootState::BOOT_DEGRADED;
-  internetCheckFailures = 0;
-  lastInternetCheckOk = true;
-  lastInternetCheckHttpCode = 0;
-  refreshAfterInternetRecovery(now);
+  bootState = BootState::BOOT_WIFI;
 }
 
 // tickInitialDataFetch()
@@ -2060,13 +2080,9 @@ void setup() {
 
 // loop: non-blocking scheduler + web/OTA handlers.
 void loop() {
-  server.handleClient();
-  ElegantOTA.loop();
-
-  if (otaInProgress) return;
-
   unsigned long now = millis();
 
+  // Check WiFi status first BEFORE handling any requests
   if (!isWiFiConnected()) {
     if (!offlineScreenShown) {
       showStatusCentered(getOfflineStatusMessage(), ST77XX_YELLOW);
@@ -2079,8 +2095,14 @@ void loop() {
     lastDisplay = now;
 
     tickWiFiRetry(now);
-    return;
+    return;  // Do NOT serve requests while offline
   }
+
+  // Only serve requests when WiFi is connected
+  server.handleClient();
+  ElegantOTA.loop();
+
+  if (otaInProgress) return;
 
   if (offlineScreenShown) {
     // Network restored: refresh data immediately.

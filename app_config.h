@@ -2,6 +2,7 @@
 // File: app_config.h
 // Purpose: Compile-time hardware, timing and UI constants
 // Changelog (latest first):
+//   - 2026.05.14: Reduced HTTP timeout to 3s, increased health-check interval to 10min, 2min recovery cooldown
 //   - 2026.05.03: Header/comment structure normalized (format-only update)
 // =====================================================================
 
@@ -174,13 +175,14 @@ constexpr unsigned long INITIAL_DATA_FETCH_DELAY_MS = 1200;  // Delay before fir
 // Short timeouts ensure UI remains responsive even on slow/unreliable networks
 
 // HTTP Request Timeouts
-constexpr uint16_t HTTP_TIMEOUT_MS = 3500;  // Standard HTTP request timeout (3.5 sec) for all data fetches
+constexpr uint16_t HTTP_TIMEOUT_MS = 3000;      // Standard HTTP request timeout (3 sec) for all data fetches - reduced for better responsiveness
+constexpr uint16_t HTTP_TIMEOUT_MAX_MS = 4000;  // Absolute max timeout to prevent web server blocking
 
 // Periodic Internet Health Check
 // Proactive checks to detect "WiFi connected but internet unavailable" states.
-constexpr unsigned long INTERNET_HEALTHCHECK_INTERVAL_MS = 300000UL;  // Run full internet check every 5 minutes
+constexpr unsigned long INTERNET_HEALTHCHECK_INTERVAL_MS = 600000UL;  // Run full internet check every 10 minutes
 constexpr uint8_t INTERNET_HEALTHCHECK_FAILURE_THRESHOLD = 2;         // Consecutive failures before forced recovery
-constexpr unsigned long INTERNET_RECOVERY_COOLDOWN_MS = 60000UL;      // Minimum delay between forced recoveries
+constexpr unsigned long INTERNET_RECOVERY_COOLDOWN_MS = 120000UL;     // Minimum delay between forced recoveries (2 min)
 constexpr char INTERNET_HEALTHCHECK_URL[] = "https://connectivitycheck.gstatic.com/generate_204";
 
 // Request Retry Logic
