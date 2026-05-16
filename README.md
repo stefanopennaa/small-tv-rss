@@ -8,6 +8,8 @@
 
 Firmware for **GeekMagic SmallTV** with weather, RSS news, NTP clock, and GTT monitoring, including a web dashboard and OTA updates.
 
+![Small TV RSS](./small-tv-rss.png)
+
 > Hobby project (AI-assisted), use at your own risk.
 
 ## Overview
